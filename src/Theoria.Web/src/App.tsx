@@ -24,7 +24,7 @@ export default function App() {
         <div className="app">
             <header className="app-header">
                 <a
-                    href="https://github.com/afahey03/Theoria/releases/latest/download/Theoria.Desktop.exe"
+                    href="https://github.com/afahey03/Theoria/releases/latest/download/Theoria-Desktop-win-x64.zip"
                     className="install-btn"
                     download
                 >

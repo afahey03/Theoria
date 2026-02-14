@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Theoria.Api/Theoria.Api.csproj" />
+    <Project Path="src/Theoria.Desktop/Theoria.Desktop.csproj" />
+    <Project Path="src/Theoria.Engine/Theoria.Engine.csproj" />
+    <Project Path="src/Theoria.Shared/Theoria.Shared.csproj" />
+  </Folder>
+</Solution>

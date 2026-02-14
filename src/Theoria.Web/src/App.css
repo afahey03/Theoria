@@ -1,0 +1,23 @@
+.app {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.app-header {
+    text-align: center;
+    margin-bottom: 32px;
+    padding-top: 16px;
+}
+
+.app-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.app-subtitle {
+    font-size: 14px;
+    color: #7f8c8d;
+    letter-spacing: 0.5px;
+}

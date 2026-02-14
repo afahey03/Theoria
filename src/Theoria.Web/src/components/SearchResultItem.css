@@ -35,7 +35,10 @@
     font-size: 12px;
     color: #7a9a6a;
     margin-bottom: 8px;
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .result-snippet {

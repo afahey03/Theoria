@@ -94,10 +94,7 @@ public sealed class SearchViewModel : ViewModelBase
 
             OnPropertyChanged(nameof(CanLoadMore));
 
-            var moreText = _allResults.Count > _displayedCount
-                ? $" (scroll for more)"
-                : "";
-            StatusText = $"Found {result.TotalMatches} results in {result.ElapsedMilliseconds:F1}ms{moreText}";
+            StatusText = $"Found {result.TotalMatches} results in {result.ElapsedMilliseconds:F1}ms";
         }
         catch (Exception ex)
         {
@@ -121,9 +118,6 @@ public sealed class SearchViewModel : ViewModelBase
         _isLoadingMore = false;
 
         OnPropertyChanged(nameof(CanLoadMore));
-
-        if (_displayedCount >= _allResults.Count)
-            StatusText = StatusText.Replace(" (scroll for more)", "");
 
         return Task.CompletedTask;
     }

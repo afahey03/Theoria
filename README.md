@@ -2,6 +2,14 @@
 
 A search engine for theology and philosophy. Type a query, get ranked results from the internet.
 
+## Tech Stack
+
+**Language:** C#, TypeScript
+**Runtime:** .NET 8, Node.js
+**Backend:** ASP.NET Core
+**Frontend:** React, Vite
+**Desktop:** WPF, WebView2 (Chromium)
+
 ## Quick Start
 
 ### Prerequisites
@@ -9,7 +17,7 @@ A search engine for theology and philosophy. Type a query, get ranked results fr
 - .NET 8 SDK
 - Node.js
 
-### Run the Web App
+### Development for Web App
 
 ```bash
 # Terminal 1 — API
@@ -24,7 +32,7 @@ npm run dev
 
 Open `http://localhost:3000` and search.
 
-### Run the Desktop App
+### Development for Desktop App
 
 ```bash
 cd src/Theoria.Desktop
@@ -51,7 +59,3 @@ src/
   Theoria.Desktop    WPF desktop client
   Theoria.Web        React + Vite frontend
 ```
-
-## License
-
-[MIT](LICENSE)

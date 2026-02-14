@@ -37,6 +37,12 @@
     box-shadow: 0 4px 12px rgba(107, 76, 48, 0.3);
 }
 
+@media (max-width: 768px) {
+    .install-btn {
+        display: none;
+    }
+}
+
 .app-title {
     font-family: 'Crimson Pro', Georgia, 'Times New Roman', serif;
     font-size: 48px;

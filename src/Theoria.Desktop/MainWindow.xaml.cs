@@ -136,25 +136,61 @@ public partial class MainWindow : Window
     /// </summary>
     private Border CreateArticleToolbar(string url, WebView2 webView)
     {
-        var urlText = new TextBlock
+        var urlBox = new TextBox
         {
             Text = url,
             Foreground = new System.Windows.Media.SolidColorBrush(
                 (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C4B8A8")),
+            Background = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1E0F04")),
+            CaretBrush = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C4B8A8")),
+            BorderThickness = new Thickness(1),
+            BorderBrush = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4A3928")),
             FontSize = 12,
             FontFamily = new System.Windows.Media.FontFamily("Consolas, 'Courier New', monospace"),
             VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(6, 4, 6, 4),
             Margin = new Thickness(10, 0, 0, 0),
-            Opacity = 0.9
         };
 
-        // Keep URL text in sync with navigation
+        // Navigate when user presses Enter
+        urlBox.KeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Return) return;
+            e.Handled = true;
+
+            var input = urlBox.Text.Trim();
+            if (string.IsNullOrEmpty(input)) return;
+
+            // Auto-prepend https:// if no scheme
+            if (!input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !input.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                input = "https://" + input;
+            }
+
+            try
+            {
+                webView.CoreWebView2?.Navigate(input);
+            }
+            catch
+            {
+                // Invalid URL — ignore
+            }
+
+            // Move focus away from the textbox
+            System.Windows.Input.Keyboard.ClearFocus();
+        };
+
+        // Keep URL box in sync with navigation
         webView.SourceChanged += (_, _) =>
         {
             var newUrl = webView.Source?.AbsoluteUri;
-            if (!string.IsNullOrEmpty(newUrl))
-                urlText.Text = newUrl;
+            if (!string.IsNullOrEmpty(newUrl) && !urlBox.IsKeyboardFocused)
+                urlBox.Text = newUrl;
         };
 
         var toolbarBtnStyle = CreateToolbarButtonStyle();
@@ -194,7 +230,7 @@ public partial class MainWindow : Window
         var dock = new DockPanel();
         DockPanel.SetDock(stack, Dock.Left);
         dock.Children.Add(stack);
-        dock.Children.Add(urlText);
+        dock.Children.Add(urlBox);
 
         return new Border
         {

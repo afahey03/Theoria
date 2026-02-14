@@ -5,7 +5,7 @@ import type { SearchResult } from './types';
  * In development, requests are proxied by Vite to the ASP.NET backend.
  */
 
-const BASE_URL = '';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 /**
  * Performs a live internet search. The backend discovers relevant URLs

@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Windows.Input;
 using Theoria.Engine;
 using Theoria.Engine.Crawling;
@@ -12,25 +10,17 @@ namespace Theoria.Desktop.ViewModels;
 /// <summary>
 /// Main view model for the desktop search window.
 ///
-/// Supports two modes:
-///   1. Live Search Mode  – searches the internet in real time via DuckDuckGo +
-///                          BM25 ranking (same pipeline as the web app).
-///   2. Hosted API Mode   – calls Theoria.Api over HTTP (shares the same live search).
-///
-/// Both modes produce internet search results.
-/// The toggle is controlled by <see cref="UseLocalEngine"/>.
+/// Searches the internet in real time via DuckDuckGo + BM25 ranking
+/// (same pipeline as the web app).
 /// </summary>
 public sealed class SearchViewModel : ViewModelBase
 {
     private readonly LiveSearchOrchestrator _liveSearch;
-    private readonly HttpClient _httpClient;
 
     private string _query = string.Empty;
-    private bool _useLocalEngine = true;
     private bool _isSearching;
     private bool _isLoadingMore;
     private string _statusText = "Ready";
-    private string _apiBaseUrl = "http://localhost:5110";
 
     /// <summary>All results from the last search (may be more than currently displayed).</summary>
     private List<SearchResultItem> _allResults = [];
@@ -48,8 +38,6 @@ public sealed class SearchViewModel : ViewModelBase
         var searchProvider = new WebSearchProvider();
         _liveSearch = new LiveSearchOrchestrator(searchProvider, crawler);
 
-        _httpClient = new HttpClient();
-
         SearchCommand = new RelayCommand(ExecuteSearchAsync, _ => !string.IsNullOrWhiteSpace(Query));
         LoadMoreCommand = new RelayCommand(ExecuteLoadMoreAsync, _ => CanLoadMore);
     }
@@ -62,16 +50,6 @@ public sealed class SearchViewModel : ViewModelBase
         set => SetProperty(ref _query, value);
     }
 
-    public bool UseLocalEngine
-    {
-        get => _useLocalEngine;
-        set
-        {
-            if (SetProperty(ref _useLocalEngine, value))
-                StatusText = value ? "Mode: Live Internet Search" : "Mode: Hosted API";
-        }
-    }
-
     public bool IsSearching
     {
         get => _isSearching;
@@ -82,12 +60,6 @@ public sealed class SearchViewModel : ViewModelBase
     {
         get => _statusText;
         set => SetProperty(ref _statusText, value);
-    }
-
-    public string ApiBaseUrl
-    {
-        get => _apiBaseUrl;
-        set => SetProperty(ref _apiBaseUrl, value);
     }
 
     /// <summary>Observable collection of search result items bound to the ListView.</summary>
@@ -115,20 +87,8 @@ public sealed class SearchViewModel : ViewModelBase
 
         try
         {
-            SearchResult result;
-
-            if (UseLocalEngine)
-            {
-                // Direct in-process live internet search — fetch up to 50
-                result = await _liveSearch.SearchAsync(Query, topN: 50);
-            }
-            else
-            {
-                // Call the hosted API
-                var response = await _httpClient.GetFromJsonAsync<SearchResult>(
-                    $"{ApiBaseUrl}/search?q={Uri.EscapeDataString(Query)}&topN=50");
-                result = response ?? new SearchResult { Query = Query, Items = [] };
-            }
+            // Live internet search via DuckDuckGo + BM25
+            var result = await _liveSearch.SearchAsync(Query, topN: 50);
 
             _allResults = [.. result.Items];
 

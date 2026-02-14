@@ -228,29 +228,17 @@
         <Border Grid.Row="0"
                 Background="{StaticResource HeaderBg}"
                 Padding="20,14">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left">
-                    <TextBlock Text="Theoria"
-                               FontSize="26"
-                               FontWeight="Bold"
-                               FontFamily="Georgia, 'Times New Roman', serif"
-                               Foreground="{StaticResource HeaderFg}"/>
-                    <TextBlock Text="THEOLOGY &amp; PHILOSOPHY SEARCH ENGINE"
-                               FontSize="10"
-                               Foreground="#B5A898"
-                               Margin="2,2,0,0"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <CheckBox Content="Direct Search"
-                              IsChecked="{Binding UseLocalEngine}"
-                              Foreground="#B5A898"
-                              FontSize="12"
-                              VerticalAlignment="Center"
-                              ToolTip="Search the internet directly (checked) or via the Theoria API"/>
-                </StackPanel>
-            </DockPanel>
+            <StackPanel>
+                <TextBlock Text="Theoria"
+                           FontSize="26"
+                           FontWeight="Bold"
+                           FontFamily="Georgia, 'Times New Roman', serif"
+                           Foreground="{StaticResource HeaderFg}"/>
+                <TextBlock Text="THEOLOGY &amp; PHILOSOPHY SEARCH ENGINE"
+                           FontSize="10"
+                           Foreground="#B5A898"
+                           Margin="2,2,0,0"/>
+            </StackPanel>
         </Border>
 
         <!-- Row 1: Tab control -->

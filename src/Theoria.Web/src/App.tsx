@@ -23,6 +23,13 @@ export default function App() {
     return (
         <div className="app">
             <header className="app-header">
+                <a
+                    href="/TheoriaSetup.exe"
+                    className="install-btn"
+                    download
+                >
+                    Install Theoria
+                </a>
                 <h1 className="app-title">Theoria</h1>
                 <p className="app-subtitle">Theology &amp; Philosophy Search Engine</p>
             </header>

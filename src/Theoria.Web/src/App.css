@@ -1,12 +1,40 @@
 .app {
     max-width: 720px;
     margin: 0 auto;
+    position: relative;
 }
 
 .app-header {
     text-align: center;
     margin-bottom: 36px;
     padding-top: 24px;
+    position: relative;
+}
+
+.install-btn {
+    position: absolute;
+    top: 24px;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    color: #f5f0e8;
+    background: linear-gradient(135deg, #6b4c30 0%, #8b6f4e 100%);
+    border: none;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+    letter-spacing: 0.3px;
+}
+
+.install-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(107, 76, 48, 0.3);
 }
 
 .app-title {

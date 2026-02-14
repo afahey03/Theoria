@@ -4,11 +4,11 @@ A search engine for theology and philosophy. Type a query, get ranked results fr
 
 ## Tech Stack
 
-**Language:** C#, TypeScript
-**Runtime:** .NET 8, Node.js
-**Backend:** ASP.NET Core
-**Frontend:** React, Vite
-**Desktop:** WPF, WebView2 (Chromium)
+**Language:** C#, TypeScript  
+**Runtime:** .NET 8, Node.js  
+**Backend:** ASP.NET Core  
+**Frontend:** React, Vite  
+**Desktop:** WPF, WebView2 (Chromium)  
 
 ## Quick Start
 

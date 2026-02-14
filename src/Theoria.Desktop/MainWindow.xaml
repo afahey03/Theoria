@@ -218,7 +218,7 @@
 
         <!-- Modern flat TabControl style -->
         <Style x:Key="FlatTabControl"
-                TargetType="TabControl">
+               TargetType="TabControl">
             <Setter Property="Background"
                     Value="{StaticResource PageBg}"/>
             <Setter Property="BorderThickness"
@@ -258,7 +258,7 @@
 
         <!-- Modern flat TabItem style -->
         <Style x:Key="FlatTabItem"
-                TargetType="TabItem">
+               TargetType="TabItem">
             <Setter Property="Foreground"
                     Value="#B5A898"/>
             <Setter Property="FontSize"
@@ -279,7 +279,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected"
-                                    Value="True">
+                                     Value="True">
                                 <Setter TargetName="TabBorder"
                                         Property="Background"
                                         Value="#3C2415"/>
@@ -289,9 +289,9 @@
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsMouseOver"
-                                            Value="True"/>
+                                               Value="True"/>
                                     <Condition Property="IsSelected"
-                                            Value="False"/>
+                                               Value="False"/>
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="TabBorder"
                                         Property="Background"
@@ -324,7 +324,7 @@
                 Padding="24,14">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left"
-                        VerticalAlignment="Center">
+                            VerticalAlignment="Center">
                     <TextBlock Text="Theoria"
                                FontSize="24"
                                FontWeight="Bold"
@@ -383,7 +383,8 @@
                                     DockPanel.Dock="Right"
                                     Style="{StaticResource SearchBtn}"
                                     Margin="10,0,0,0"/>
-                            <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox x:Name="SearchBox"
+                                     Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource SearchInput}"
                                      VerticalContentAlignment="Center">
                                 <TextBox.InputBindings>

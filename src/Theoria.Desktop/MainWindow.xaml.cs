@@ -19,6 +19,32 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Double-click: select word, Triple-click: select all (Chrome-style)
+        SearchBox.PreviewMouseDown += (_, e) =>
+        {
+            if (e.ClickCount == 3)
+            {
+                SearchBox.SelectAll();
+                e.Handled = true;
+            }
+        };
+        SearchBox.MouseDoubleClick += (_, e) =>
+        {
+            var text = SearchBox.Text;
+            var pos = SearchBox.CaretIndex;
+            if (string.IsNullOrEmpty(text) || pos < 0) return;
+
+            int start = pos;
+            while (start > 0 && !char.IsWhiteSpace(text[start - 1]))
+                start--;
+            int end = pos;
+            while (end < text.Length && !char.IsWhiteSpace(text[end]))
+                end++;
+
+            SearchBox.Select(start, end - start);
+            e.Handled = true;
+        };
     }
 
     /// <summary>

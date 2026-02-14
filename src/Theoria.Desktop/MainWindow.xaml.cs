@@ -156,6 +156,34 @@ public partial class MainWindow : Window
             Margin = new Thickness(10, 0, 0, 0),
         };
 
+        // Double-click: select word, Triple-click: select all
+        urlBox.PreviewMouseDown += (_, e) =>
+        {
+            if (e.ClickCount == 3)
+            {
+                urlBox.SelectAll();
+                e.Handled = true;
+            }
+        };
+        urlBox.MouseDoubleClick += (_, e) =>
+        {
+            // Select the "word" segment around the caret (delimited by / . : ? & = etc.)
+            var text = urlBox.Text;
+            var pos = urlBox.CaretIndex;
+            if (string.IsNullOrEmpty(text) || pos < 0) return;
+
+            var separators = new HashSet<char> { '/', '.', ':', '?', '&', '=', '#', '-', '_', ' ' };
+            int start = pos;
+            while (start > 0 && !separators.Contains(text[start - 1]))
+                start--;
+            int end = pos;
+            while (end < text.Length && !separators.Contains(text[end]))
+                end++;
+
+            urlBox.Select(start, end - start);
+            e.Handled = true;
+        };
+
         // Navigate when user presses Enter
         urlBox.KeyDown += (_, e) =>
         {

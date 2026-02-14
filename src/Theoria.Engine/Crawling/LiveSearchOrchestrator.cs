@@ -31,10 +31,10 @@ public sealed class LiveSearchOrchestrator
     private readonly WebCrawler _crawler;
 
     /// <summary>Max concurrent page fetches to run in parallel.</summary>
-    public int MaxParallelFetches { get; init; } = 5;
+    public int MaxParallelFetches { get; init; } = 8;
 
     /// <summary>How many DuckDuckGo result URLs to fetch.</summary>
-    public int MaxDiscoveryResults { get; init; } = 25;
+    public int MaxDiscoveryResults { get; init; } = 50;
 
     public LiveSearchOrchestrator(
         WebSearchProvider searchProvider,
@@ -153,6 +153,11 @@ public sealed class LiveSearchOrchestrator
         foreach (var docId in allDocIds)
         {
             double score = scorer.Score(queryTokens, docId);
+
+            // Boost scholarly / academic domains by 50%
+            if (WebSearchProvider.IsScholarlyDomain(docId))
+                score *= 1.5;
+
             scored.Add((docId, score));
         }
 

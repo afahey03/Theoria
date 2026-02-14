@@ -23,7 +23,7 @@ export function useSearch() {
         setError(null);
 
         try {
-            const searchResult = await search(query, 25);
+            const searchResult = await search(query, 50);
             setAllItems(searchResult.items);
             setDisplayedCount(Math.min(PAGE_SIZE, searchResult.items.length));
             setResult({
@@ -41,14 +41,16 @@ export function useSearch() {
     }, [query]);
 
     const loadMore = useCallback(() => {
-        const nextCount = Math.min(displayedCount + PAGE_SIZE, allItems.length);
-        setDisplayedCount(nextCount);
-        setResult((prev) =>
-            prev ? { ...prev, items: allItems.slice(0, nextCount) } : prev
-        );
-    }, [allItems, displayedCount]);
+        setDisplayedCount((prev) => {
+            const nextCount = Math.min(prev + PAGE_SIZE, allItems.length);
+            setResult((r) =>
+                r ? { ...r, items: allItems.slice(0, nextCount) } : r
+            );
+            return nextCount;
+        });
+    }, [allItems]);
 
-    const hasMore = displayedCount < allItems.length;
+    const hasMore = allItems.length > 0 && displayedCount < allItems.length;
 
     return {
         query,

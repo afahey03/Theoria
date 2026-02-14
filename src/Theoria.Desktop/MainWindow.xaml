@@ -6,104 +6,359 @@
         xmlns:vm="clr-namespace:Theoria.Desktop.ViewModels"
         mc:Ignorable="d"
         Title="Theoria – Theology &amp; Philosophy Search Engine"
-        Height="600"
-        Width="900"
-        WindowStartupLocation="CenterScreen">
+        Height="700"
+        Width="960"
+        WindowStartupLocation="CenterScreen"
+        Background="#FAF8F5"
+        Icon="aq.ico">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Warm scholarly palette -->
+        <SolidColorBrush x:Key="HeaderBg"
+                         Color="#3C2415"/>
+        <SolidColorBrush x:Key="HeaderFg"
+                         Color="#F5F0E8"/>
+        <SolidColorBrush x:Key="AccentBrush"
+                         Color="#8B6F4E"/>
+        <SolidColorBrush x:Key="AccentDark"
+                         Color="#6B4C30"/>
+        <SolidColorBrush x:Key="CardBg"
+                         Color="#FFFDF9"/>
+        <SolidColorBrush x:Key="CardBorder"
+                         Color="#E8DDD0"/>
+        <SolidColorBrush x:Key="TextPrimary"
+                         Color="#2D2A26"/>
+        <SolidColorBrush x:Key="TextSecondary"
+                         Color="#8A7968"/>
+        <SolidColorBrush x:Key="LinkColor"
+                         Color="#5B3A1A"/>
+        <SolidColorBrush x:Key="UrlColor"
+                         Color="#7A9A6A"/>
+        <SolidColorBrush x:Key="PageBg"
+                         Color="#FAF8F5"/>
+
+        <!-- Search button style -->
+        <Style x:Key="SearchBtn"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="{StaticResource AccentDark}"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource HeaderFg}"/>
+            <Setter Property="FontSize"
+                    Value="14"/>
+            <Setter Property="FontWeight"
+                    Value="SemiBold"/>
+            <Setter Property="Padding"
+                    Value="22,8"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver"
+                         Value="True">
+                    <Setter Property="Background"
+                            Value="{StaticResource AccentBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled"
+                         Value="False">
+                    <Setter Property="Opacity"
+                            Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Load more button style -->
+        <Style x:Key="LoadMoreBtn"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource AccentDark}"/>
+            <Setter Property="FontSize"
+                    Value="13"/>
+            <Setter Property="FontWeight"
+                    Value="SemiBold"/>
+            <Setter Property="Padding"
+                    Value="24,8"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="2"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{StaticResource AccentDark}"/>
+                                <Setter TargetName="Bd"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource AccentDark}"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource HeaderFg}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Search input style -->
+        <Style x:Key="SearchInput"
+               TargetType="TextBox">
+            <Setter Property="FontSize"
+                    Value="15"/>
+            <Setter Property="Padding"
+                    Value="10,8"/>
+            <Setter Property="Background"
+                    Value="{StaticResource CardBg}"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush"
+                    Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness"
+                    Value="2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="2,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Result card item container style -->
+        <Style x:Key="ResultCard"
+               TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Stretch"/>
+            <Setter Property="Margin"
+                    Value="0,0,0,10"/>
+            <Setter Property="Padding"
+                    Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="CardBorder"
+                                Background="{StaticResource CardBg}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16,14">
+                            <Border.Effect>
+                                <DropShadowEffect ShadowDepth="1"
+                                                  BlurRadius="6"
+                                                  Opacity="0.06"
+                                                  Color="#3C2415"/>
+                            </Border.Effect>
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="CardBorder"
+                                        Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="2"
+                                                          BlurRadius="14"
+                                                          Opacity="0.10"
+                                                          Color="#3C2415"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
     <Window.DataContext>
         <vm:SearchViewModel/>
     </Window.DataContext>
 
-    <Grid Margin="16">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Header / Mode toggle -->
-            <RowDefinition Height="Auto"/>
-            <!-- Search bar -->
+            <!-- Header bar -->
             <RowDefinition Height="*"/>
-            <!-- Results list -->
-            <RowDefinition Height="Auto"/>
-            <!-- Status bar -->
+            <!-- Tabbed content area -->
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Header and mode toggle -->
-        <DockPanel Grid.Row="0"
-                   Margin="0,0,0,8">
-            <TextBlock Text="Theoria"
-                       FontSize="22"
-                       FontWeight="Bold"
-                       VerticalAlignment="Center"
-                       DockPanel.Dock="Left"/>
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-                <CheckBox Content="Direct Search (no API)"
-                          IsChecked="{Binding UseLocalEngine}"
-                          VerticalAlignment="Center"
-                          Margin="12,0,0,0"
-                          ToolTip="When checked, searches the internet directly. Uncheck to relay through the hosted Theoria.Api."/>
-            </StackPanel>
-        </DockPanel>
+        <!-- Row 0: Header bar -->
+        <Border Grid.Row="0"
+                Background="{StaticResource HeaderBg}"
+                Padding="20,14">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Text="Theoria"
+                               FontSize="26"
+                               FontWeight="Bold"
+                               FontFamily="Georgia, 'Times New Roman', serif"
+                               Foreground="{StaticResource HeaderFg}"/>
+                    <TextBlock Text="THEOLOGY &amp; PHILOSOPHY SEARCH ENGINE"
+                               FontSize="10"
+                               Foreground="#B5A898"
+                               Margin="2,2,0,0"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <CheckBox Content="Direct Search"
+                              IsChecked="{Binding UseLocalEngine}"
+                              Foreground="#B5A898"
+                              FontSize="12"
+                              VerticalAlignment="Center"
+                              ToolTip="Search the internet directly (checked) or via the Theoria API"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
 
-        <!-- Row 1: Search input -->
-        <DockPanel Grid.Row="1"
-                   Margin="0,0,0,8">
-            <Button Content="Search"
-                    Command="{Binding SearchCommand}"
-                    DockPanel.Dock="Right"
-                    Padding="16,6"
-                    Margin="8,0,0,0"/>
-            <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="14"
-                     Padding="6"
-                     VerticalContentAlignment="Center">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Return"
-                                Command="{Binding SearchCommand}"/>
-                </TextBox.InputBindings>
-            </TextBox>
-        </DockPanel>
+        <!-- Row 1: Tab control -->
+        <TabControl x:Name="MainTabs"
+                    Grid.Row="1"
+                    Background="{StaticResource PageBg}"
+                    BorderThickness="0"
+                    Padding="0">
 
-        <!-- Row 2: Search results -->
-        <ListView Grid.Row="2"
-                  ItemsSource="{Binding Results}"
-                  BorderThickness="1"
-                  BorderBrush="#CCCCCC"
-                  ScrollViewer.ScrollChanged="ListView_ScrollChanged">
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Margin="4,8">
-                        <TextBlock FontSize="15"
-                                FontWeight="SemiBold">
-                            <Hyperlink NavigateUri="{Binding Url}"
-                                       RequestNavigate="Hyperlink_RequestNavigate"
-                                       Foreground="#1a0dab"
-                                       TextDecorations="None">
-                                <Run Text="{Binding Title, Mode=OneWay}"/>
-                            </Hyperlink>
-                        </TextBlock>
-                        <TextBlock Text="{Binding Url}"
-                                   FontSize="11"
-                                   Foreground="#006621"
-                                   Margin="0,2,0,4"/>
-                        <TextBlock Text="{Binding Snippet}"
-                                   TextWrapping="Wrap"
-                                   FontSize="13"
-                                   Foreground="#545454"/>
-                        <StackPanel Orientation="Horizontal"
-                                    Margin="0,4,0,0">
-                            <TextBlock Text="{Binding Score, StringFormat='Score: {0:F3}'}"
-                                       FontSize="11"
-                                       Foreground="#999999"/>
+            <!-- Search Tab (always present, not closeable) -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="&#x1F50D; Search"
+                               FontSize="13"
+                               Padding="6,4"/>
+                </TabItem.Header>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- Search bar -->
+                        <RowDefinition Height="*"/>
+                        <!-- Results -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Load more + status -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Search input -->
+                    <Border Grid.Row="0"
+                            Padding="20,14"
+                            Background="{StaticResource PageBg}">
+                        <DockPanel>
+                            <Button Content="Search"
+                                    Command="{Binding SearchCommand}"
+                                    DockPanel.Dock="Right"
+                                    Style="{StaticResource SearchBtn}"
+                                    Margin="10,0,0,0"/>
+                            <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource SearchInput}"
+                                     VerticalContentAlignment="Center">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Return"
+                                                Command="{Binding SearchCommand}"/>
+                                </TextBox.InputBindings>
+                            </TextBox>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Search results -->
+                    <ListView Grid.Row="1"
+                              ItemsSource="{Binding Results}"
+                              Background="{StaticResource PageBg}"
+                              BorderThickness="0"
+                              Padding="16,6,16,6"
+                              ItemContainerStyle="{StaticResource ResultCard}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock FontSize="17"
+                                               FontWeight="SemiBold"
+                                               FontFamily="Georgia, 'Times New Roman', serif">
+                                        <Hyperlink NavigateUri="{Binding Url}"
+                                                   RequestNavigate="Hyperlink_RequestNavigate"
+                                                   Foreground="{StaticResource LinkColor}"
+                                                   TextDecorations="None">
+                                            <Run Text="{Binding Title, Mode=OneWay}"/>
+                                        </Hyperlink>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Url}"
+                                               FontSize="11"
+                                               Foreground="{StaticResource UrlColor}"
+                                               Margin="0,3,0,6"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Snippet}"
+                                               TextWrapping="Wrap"
+                                               FontSize="13"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               LineHeight="20"/>
+                                    <TextBlock Text="{Binding Score, StringFormat='Relevance: {0:F3}'}"
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,6,0,0"
+                                               FontWeight="Medium"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <!-- Load More + Status -->
+                    <Border Grid.Row="2"
+                            Background="{StaticResource PageBg}"
+                            Padding="20,6,20,10">
+                        <StackPanel>
+                            <Button Content="Load more results"
+                                    Command="{Binding LoadMoreCommand}"
+                                    Style="{StaticResource LoadMoreBtn}"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,4,0,8"
+                                    Visibility="{Binding CanLoadMore, Converter={StaticResource BoolToVis}}"/>
+                            <TextBlock Text="{Binding StatusText}"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       HorizontalAlignment="Center"/>
                         </StackPanel>
-                    </StackPanel>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-
-        <!-- Row 3: Status bar -->
-        <StatusBar Grid.Row="3"
-                   Margin="0,4,0,0">
-            <TextBlock Text="{Binding StatusText}"/>
-        </StatusBar>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </Window>

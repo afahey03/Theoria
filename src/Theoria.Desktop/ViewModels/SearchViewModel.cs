@@ -119,14 +119,14 @@ public sealed class SearchViewModel : ViewModelBase
 
             if (UseLocalEngine)
             {
-                // Direct in-process live internet search — fetch up to 25
-                result = await _liveSearch.SearchAsync(Query, topN: 25);
+                // Direct in-process live internet search — fetch up to 50
+                result = await _liveSearch.SearchAsync(Query, topN: 50);
             }
             else
             {
                 // Call the hosted API
                 var response = await _httpClient.GetFromJsonAsync<SearchResult>(
-                    $"{ApiBaseUrl}/search?q={Uri.EscapeDataString(Query)}&topN=25");
+                    $"{ApiBaseUrl}/search?q={Uri.EscapeDataString(Query)}&topN=50");
                 result = response ?? new SearchResult { Query = Query, Items = [] };
             }
 
@@ -137,6 +137,8 @@ public sealed class SearchViewModel : ViewModelBase
             foreach (var item in firstPage)
                 Results.Add(item);
             _displayedCount = Results.Count;
+
+            OnPropertyChanged(nameof(CanLoadMore));
 
             var moreText = _allResults.Count > _displayedCount
                 ? $" (scroll for more)"
@@ -163,6 +165,8 @@ public sealed class SearchViewModel : ViewModelBase
             Results.Add(item);
         _displayedCount = Results.Count;
         _isLoadingMore = false;
+
+        OnPropertyChanged(nameof(CanLoadMore));
 
         if (_displayedCount >= _allResults.Count)
             StatusText = StatusText.Replace(" (scroll for more)", "");

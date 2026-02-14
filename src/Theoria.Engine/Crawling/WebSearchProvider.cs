@@ -37,74 +37,136 @@ public sealed class WebSearchProvider
             return [];
 
         var results = new List<WebSearchResult>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scholarlyQuery = BuildScholarlyQuery(query);
+        var encoded = Uri.EscapeDataString(scholarlyQuery);
 
-        try
+        // Fetch up to 2 pages from DuckDuckGo to get enough results
+        // Page 1: normal GET request
+        // Page 2: use the s= offset extracted from page 1's "next" form
+        string? nextFormData = null;
+
+        for (int page = 0; page < 2 && results.Count < maxResults; page++)
         {
-            // DuckDuckGo HTML search (no API key needed)
-            var encoded = Uri.EscapeDataString(query);
-            var url = $"https://html.duckduckgo.com/html/?q={encoded}";
-
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            // DuckDuckGo requires form-style requests to work reliably
-            request.Headers.Add("Accept", "text/html");
-            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-
-            var response = await _httpClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            var html = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
-
-            // DuckDuckGo HTML results are in <div class="result"> blocks
-            var resultNodes = doc.DocumentNode.SelectNodes("//div[contains(@class,'result__body')]")
-                           ?? doc.DocumentNode.SelectNodes("//div[contains(@class,'result')]");
-
-            if (resultNodes is null)
-                return results;
-
-            foreach (var node in resultNodes)
+            try
             {
-                if (results.Count >= maxResults) break;
+                string html;
 
-                // Extract the link
-                var linkNode = node.SelectSingleNode(".//a[contains(@class,'result__a')]")
-                             ?? node.SelectSingleNode(".//a[@href]");
-
-                if (linkNode is null) continue;
-
-                var href = linkNode.GetAttributeValue("href", string.Empty);
-                var resultUrl = ExtractRealUrl(href);
-
-                if (string.IsNullOrWhiteSpace(resultUrl)) continue;
-                if (!resultUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
-
-                // Extract title
-                var title = HtmlEntity.DeEntitize(linkNode.InnerText).Trim();
-
-                // Extract snippet
-                var snippetNode = node.SelectSingleNode(".//a[contains(@class,'result__snippet')]")
-                               ?? node.SelectSingleNode(".//div[contains(@class,'result__snippet')]");
-                var snippet = snippetNode is not null
-                    ? HtmlEntity.DeEntitize(snippetNode.InnerText).Trim()
-                    : string.Empty;
-
-                results.Add(new WebSearchResult
+                if (page == 0)
                 {
-                    Url = resultUrl,
-                    Title = title,
-                    Snippet = snippet
-                });
+                    var url = $"https://html.duckduckgo.com/html/?q={encoded}";
+                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.Add("Accept", "text/html");
+                    request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+                    var response = await _httpClient.SendAsync(request, cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    html = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+                else if (nextFormData is not null)
+                {
+                    // POST to fetch the next page using form data from page 1
+                    var request = new HttpRequestMessage(HttpMethod.Post, "https://html.duckduckgo.com/html/")
+                    {
+                        Content = new StringContent(nextFormData, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded")
+                    };
+                    request.Headers.Add("Accept", "text/html");
+                    request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+                    var response = await _httpClient.SendAsync(request, cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    html = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+                else
+                {
+                    break; // no next page data available
+                }
+
+                var doc = new HtmlDocument();
+                doc.LoadHtml(html);
+
+                // Parse results from this page
+                var resultNodes = doc.DocumentNode.SelectNodes("//div[contains(@class,'result__body')]")
+                               ?? doc.DocumentNode.SelectNodes("//div[contains(@class,'result')]");
+
+                if (resultNodes is not null)
+                {
+                    foreach (var node in resultNodes)
+                    {
+                        if (results.Count >= maxResults) break;
+
+                        var linkNode = node.SelectSingleNode(".//a[contains(@class,'result__a')]")
+                                     ?? node.SelectSingleNode(".//a[@href]");
+
+                        if (linkNode is null) continue;
+
+                        var href = linkNode.GetAttributeValue("href", string.Empty);
+                        var resultUrl = ExtractRealUrl(href);
+
+                        if (string.IsNullOrWhiteSpace(resultUrl)) continue;
+                        if (!resultUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!seenUrls.Add(resultUrl)) continue; // skip duplicates
+
+                        var title = HtmlEntity.DeEntitize(linkNode.InnerText).Trim();
+
+                        var snippetNode = node.SelectSingleNode(".//a[contains(@class,'result__snippet')]")
+                                       ?? node.SelectSingleNode(".//div[contains(@class,'result__snippet')]");
+                        var snippet = snippetNode is not null
+                            ? HtmlEntity.DeEntitize(snippetNode.InnerText).Trim()
+                            : string.Empty;
+
+                        results.Add(new WebSearchResult
+                        {
+                            Url = resultUrl,
+                            Title = title,
+                            Snippet = snippet
+                        });
+                    }
+                }
+
+                // Extract the "next page" form data for pagination
+                nextFormData = ExtractNextPageFormData(doc);
             }
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            // If DuckDuckGo is unreachable, return empty list rather than crash
-            System.Diagnostics.Debug.WriteLine($"Web search failed: {ex.Message}");
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Web search page {page} failed: {ex.Message}");
+                break;
+            }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Extracts the hidden form fields from DuckDuckGo's "Next Page" form
+    /// so we can POST for page 2.
+    /// </summary>
+    private static string? ExtractNextPageFormData(HtmlDocument doc)
+    {
+        // DuckDuckGo has a form with class "nav-link" for the next button
+        var nextForms = doc.DocumentNode.SelectNodes("//form[contains(@class,'nav-link')]");
+        if (nextForms is null || nextForms.Count == 0)
+        {
+            // Fallback: look for any form with a "next" input
+            nextForms = doc.DocumentNode.SelectNodes("//form[.//input[@value='Next']]");
+        }
+
+        if (nextForms is null || nextForms.Count == 0)
+            return null;
+
+        // Take the last form (usually the "Next" button at bottom)
+        var form = nextForms[^1];
+        var inputs = form.SelectNodes(".//input[@name]");
+        if (inputs is null) return null;
+
+        var pairs = new List<string>();
+        foreach (var input in inputs)
+        {
+            var name = input.GetAttributeValue("name", "");
+            var value = input.GetAttributeValue("value", "");
+            if (!string.IsNullOrEmpty(name))
+                pairs.Add($"{Uri.EscapeDataString(name)}={Uri.EscapeDataString(value)}");
+        }
+
+        return pairs.Count > 0 ? string.Join("&", pairs) : null;
     }
 
     /// <summary>
@@ -154,6 +216,89 @@ public sealed class WebSearchProvider
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
         return client;
+    }
+
+    /// <summary>
+    /// Augments the user's raw query with scholarly/academic qualifiers
+    /// to bias DuckDuckGo results towards theology and philosophy scholarship.
+    /// Does NOT use site: restrictions (which would limit results to only those
+    /// domains). Instead, adds contextual academic terms so DuckDuckGo naturally
+    /// favours scholarly pages. The domain-based score boost in
+    /// <see cref="LiveSearchOrchestrator"/> handles rank promotion separately.
+    /// </summary>
+    private static string BuildScholarlyQuery(string query)
+    {
+        var lower = query.ToLowerInvariant();
+
+        bool hasAcademicTerm = lower.Contains("scholar") ||
+                               lower.Contains("academic") ||
+                               lower.Contains("journal") ||
+                               lower.Contains("paper") ||
+                               lower.Contains("site:");
+
+        if (hasAcademicTerm)
+            return query;
+
+        // Light contextual bias without site: restrictions
+        return $"{query} scholarly theology philosophy";
+    }
+
+    /// <summary>
+    /// Well-known scholarly and theological domains that receive a BM25 score
+    /// boost via <see cref="LiveSearchOrchestrator"/>.
+    /// </summary>
+    public static readonly HashSet<string> ScholarlyDomains = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Academic repositories & encyclopedias
+        "plato.stanford.edu",       // Stanford Encyclopedia of Philosophy
+        "iep.utm.edu",              // Internet Encyclopedia of Philosophy
+        "jstor.org",                // JSTOR
+        "academia.edu",             // Academia.edu
+        "philpapers.org",           // PhilPapers
+        "scholar.google.com",       // Google Scholar
+        "arxiv.org",
+        "doi.org",
+
+        // Catholic / Thomistic sources
+        "newadvent.org",            // Catholic Encyclopedia & Church Fathers
+        "corpusthomisticum.org",    // Corpus Thomisticum
+        "dhspriory.org",            // Dominican House of Studies
+        "aquinas.cc",               // Aquinas online
+        "ccel.org",                 // Christian Classics Ethereal Library
+        "fordham.edu",              // Fordham Medieval Sourcebook
+
+        // Orthodox & Patristic
+        "orthodoxwiki.org",
+
+        // Protestant / Reformed
+        "carm.org",
+        "monergism.com",
+        "theopedia.com",
+
+        // General theology & encyclopedias
+        "britannica.com",
+        "en.wikipedia.org",
+    };
+
+    /// <summary>
+    /// Returns true if the given URL belongs to a known scholarly domain.
+    /// </summary>
+    public static bool IsScholarlyDomain(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        try
+        {
+            var host = new Uri(url).Host;
+            // Check exact match or suffix match (e.g. "www.jstor.org" matches "jstor.org")
+            foreach (var domain in ScholarlyDomains)
+            {
+                if (host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+                    host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { /* malformed URL, ignore */ }
+        return false;
     }
 }
 

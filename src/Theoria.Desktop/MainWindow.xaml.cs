@@ -92,12 +92,21 @@ public partial class MainWindow : Window
             Style = FindResource("FlatTabItem") as Style
         };
 
-        // Close button removes the tab, disposes the browser, switches back
+        // Close button removes the tab, disposes the browser, switches to neighbor
         closeBtn.Click += (_, _) =>
         {
+            var closingIndex = MainTabs.Items.IndexOf(tab);
+            var wasSelected = MainTabs.SelectedItem == tab;
+
             MainTabs.Items.Remove(tab);
             webView.Dispose();
-            MainTabs.SelectedIndex = 0;
+
+            if (wasSelected && MainTabs.Items.Count > 0)
+            {
+                // Prefer the tab to the right (same position), else the one to the left
+                var newIndex = Math.Min(closingIndex, MainTabs.Items.Count - 1);
+                MainTabs.SelectedIndex = Math.Max(newIndex, 0);
+            }
         };
 
         // Hover effect on close button

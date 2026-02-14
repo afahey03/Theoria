@@ -19,11 +19,11 @@ namespace Theoria.Engine.Crawling;
 public sealed class WebCrawler
 {
     private readonly HttpClient _httpClient;
-    private readonly IIndexer _indexer;
+    private readonly IIndexer? _indexer;
 
-    public WebCrawler(IIndexer indexer, HttpClient? httpClient = null)
+    public WebCrawler(IIndexer? indexer = null, HttpClient? httpClient = null)
     {
-        _indexer = indexer ?? throw new ArgumentNullException(nameof(indexer));
+        _indexer = indexer;
         _httpClient = httpClient ?? CreateDefaultHttpClient();
     }
 
@@ -78,7 +78,7 @@ public sealed class WebCrawler
             if (!page.Success) continue;
 
             // Index the page content
-            if (!string.IsNullOrWhiteSpace(page.TextContent))
+            if (!string.IsNullOrWhiteSpace(page.TextContent) && _indexer is not null)
             {
                 var metadata = new DocumentMetadata
                 {
@@ -168,16 +168,14 @@ public sealed class WebCrawler
             }
 
             var html = await response.Content.ReadAsStringAsync(cancellationToken);
-            var title = HtmlContentExtractor.ExtractTitle(html);
-            var text = HtmlContentExtractor.ExtractText(html);
-            var links = HtmlContentExtractor.ExtractLinks(html, url);
+            var extracted = HtmlContentExtractor.Extract(html, url);
 
             return new CrawledPage
             {
                 Url = url,
-                Title = title,
-                TextContent = text,
-                OutLinks = links,
+                Title = extracted.Title,
+                TextContent = extracted.Text,
+                OutLinks = extracted.Links,
                 Success = true
             };
         }

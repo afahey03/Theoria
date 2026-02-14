@@ -54,23 +54,14 @@ public sealed class BM25Scorer : IScorer
 
         foreach (var term in queryTerms)
         {
-            var postings = _index.GetPostings(term);
-            int docFreq = postings.Count; // number of documents containing this term
-
+            int docFreq = _index.GetDocumentFrequency(term);
             if (docFreq == 0) continue;
 
-            // Find term frequency in this specific document
-            int tf = 0;
-            foreach (var posting in postings)
-            {
-                if (posting.DocId == docId)
-                {
-                    tf = posting.TermFrequency;
-                    break;
-                }
-            }
+            // O(1) lookup instead of O(n) scan through postings list
+            var posting = _index.GetPosting(term, docId);
+            if (posting is null) continue;
 
-            if (tf == 0) continue;
+            int tf = posting.TermFrequency;
 
             // IDF component: log((N - n + 0.5) / (n + 0.5) + 1)
             double idf = Math.Log((totalDocs - docFreq + 0.5) / (docFreq + 0.5) + 1.0);

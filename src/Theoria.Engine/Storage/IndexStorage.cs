@@ -44,7 +44,11 @@ public sealed class IndexStorage
     /// </summary>
     public async Task SaveAsync(InvertedIndex index, CancellationToken cancellationToken = default)
     {
-        await WriteJsonFileAsync(IndexFilePath, index.GetRawIndex().ToDictionary(), cancellationToken);
+        // Convert Dictionary<string, Posting> values back to List<Posting> for serialization
+        var indexData = index.GetRawIndex()
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Values.ToList());
+
+        await WriteJsonFileAsync(IndexFilePath, indexData, cancellationToken);
         await WriteJsonFileAsync(DocumentsFilePath, index.GetRawDocuments().ToDictionary(), cancellationToken);
         await WriteJsonFileAsync(DocLengthsFilePath, index.GetRawDocLengths().ToDictionary(), cancellationToken);
         await WriteJsonFileAsync(DocContentsFilePath, index.GetRawDocContents().ToDictionary(), cancellationToken);

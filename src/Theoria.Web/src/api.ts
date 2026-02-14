@@ -23,12 +23,3 @@ export async function search(
     }
     return response.json();
 }
-
-export async function checkHealth(): Promise<boolean> {
-    try {
-        const response = await fetch(`${BASE_URL}/health`);
-        return response.ok;
-    } catch {
-        return false;
-    }
-}

@@ -12,7 +12,7 @@ namespace Theoria.Engine.Snippets;
 ///   3. Wrap matched terms with highlight markers (e.g., <mark>...</mark>)
 ///      so the UI can render them visually.
 /// </summary>
-public static partial class SnippetGenerator
+public static class SnippetGenerator
 {
     /// <summary>Default snippet window size in characters.</summary>
     private const int WindowSize = 200;
@@ -22,9 +22,6 @@ public static partial class SnippetGenerator
 
     /// <summary>Highlight close tag.</summary>
     private const string HighlightClose = "</mark>";
-
-    [GeneratedRegex(@"\b", RegexOptions.Compiled)]
-    private static partial Regex WordBoundary();
 
     /// <summary>
     /// Generates a highlighted snippet from the given content for the specified query terms.
@@ -68,11 +65,13 @@ public static partial class SnippetGenerator
         var highlighted = snippet;
         foreach (var term in queryTerms)
         {
+            var pattern = $@"\b({Regex.Escape(term)})\b";
             highlighted = Regex.Replace(
                 highlighted,
-                @$"\b({Regex.Escape(term)})\b",
+                pattern,
                 $"{HighlightOpen}$1{HighlightClose}",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                TimeSpan.FromMilliseconds(100));
         }
 
         sb.Append(highlighted);

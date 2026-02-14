@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Theoria.Shared.Interfaces;
 
 namespace Theoria.Engine.Querying;
@@ -14,9 +15,12 @@ namespace Theoria.Engine.Querying;
 /// The parser tokenizes the query using the same ITokenizer as the indexer
 /// to ensure identical normalization.
 /// </summary>
-public sealed class QueryParser
+public sealed partial class QueryParser
 {
     private readonly ITokenizer _tokenizer;
+
+    [GeneratedRegex("\"([^\"]+)\"", RegexOptions.Compiled)]
+    private static partial Regex PhraseRegex();
 
     public QueryParser(ITokenizer tokenizer)
     {
@@ -34,10 +38,9 @@ public sealed class QueryParser
         var result = new ParsedQuery();
 
         // 1. Extract quoted phrases first
-        var phraseRegex = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
         var remaining = rawQuery;
 
-        foreach (System.Text.RegularExpressions.Match match in phraseRegex.Matches(rawQuery))
+        foreach (Match match in PhraseRegex().Matches(rawQuery))
         {
             var phraseTokens = _tokenizer.Tokenize(match.Groups[1].Value);
             if (phraseTokens.Count > 0)

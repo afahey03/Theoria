@@ -51,14 +51,3 @@
     padding: 1px 3px;
     border-radius: 3px;
 }
-
-.result-meta {
-    display: flex;
-    gap: 16px;
-    margin-top: 8px;
-    font-size: 11px;
-    color: #b5a898;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}

@@ -6,7 +6,7 @@ interface Props {
 }
 
 /**
- * Renders a single search result with title, URL, snippet, and score.
+ * Renders a single search result with title, URL, and snippet.
  * The title links to the original source. The snippet may contain <mark> tags
  * from the engine's snippet generator, rendered via dangerouslySetInnerHTML.
  */
@@ -27,9 +27,6 @@ export default function SearchResultItem({ item }: Props) {
                 className="result-snippet"
                 dangerouslySetInnerHTML={{ __html: item.snippet }}
             />
-            <div className="result-meta">
-                <span className="result-score">Score: {item.score.toFixed(3)}</span>
-            </div>
         </div>
     );
 }

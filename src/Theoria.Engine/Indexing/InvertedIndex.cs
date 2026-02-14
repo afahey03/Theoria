@@ -14,11 +14,13 @@ namespace Theoria.Engine.Indexing;
 ///     without scanning post listings.
 ///   - Document lengths (token counts) are tracked for BM25 average-
 ///     document-length computation.
+///   - Average document length is cached (O(1) reads, invalidated on mutation).
+///   - A forward index (docId → terms) enables O(terms-in-doc) removal.
 /// </summary>
 public sealed class InvertedIndex
 {
-    // term -> list of postings (one per document the term appears in)
-    private readonly ConcurrentDictionary<string, List<Posting>> _index = new(StringComparer.Ordinal);
+    // term -> { docId -> Posting }  — O(1) lookup per doc per term
+    private readonly ConcurrentDictionary<string, Dictionary<string, Posting>> _index = new(StringComparer.Ordinal);
 
     // docId -> metadata
     private readonly ConcurrentDictionary<string, DocumentMetadata> _documents = new(StringComparer.Ordinal);
@@ -29,11 +31,18 @@ public sealed class InvertedIndex
     // docId -> original raw content (needed for snippet generation)
     private readonly ConcurrentDictionary<string, string> _docContents = new(StringComparer.Ordinal);
 
+    // Forward index: docId -> set of terms the document contains (for fast removal)
+    private readonly ConcurrentDictionary<string, HashSet<string>> _docTerms = new(StringComparer.Ordinal);
+
     private readonly ITokenizer _tokenizer;
 
     // Lock used when mutating postings lists for a single document
     // to ensure atomicity of add/remove operations.
     private readonly object _writeLock = new();
+
+    // Cached average document length — invalidated on add/remove
+    private double _cachedAvgDocLength;
+    private bool _avgDocLengthDirty = true;
 
     public InvertedIndex(ITokenizer tokenizer)
     {
@@ -45,13 +54,17 @@ public sealed class InvertedIndex
     /// <summary>Total number of indexed documents.</summary>
     public int DocumentCount => _documents.Count;
 
-    /// <summary>Average document length across the corpus (in tokens).</summary>
+    /// <summary>Average document length across the corpus (in tokens). Cached for O(1) access.</summary>
     public double AverageDocumentLength
     {
         get
         {
-            if (_docLengths.IsEmpty) return 0;
-            return _docLengths.Values.Average();
+            if (_avgDocLengthDirty)
+            {
+                _cachedAvgDocLength = _docLengths.IsEmpty ? 0 : _docLengths.Values.Average();
+                _avgDocLengthDirty = false;
+            }
+            return _cachedAvgDocLength;
         }
     }
 
@@ -60,7 +73,26 @@ public sealed class InvertedIndex
     /// </summary>
     public IReadOnlyList<Posting> GetPostings(string term)
     {
-        return _index.TryGetValue(term, out var postings) ? postings : [];
+        return _index.TryGetValue(term, out var postings) ? postings.Values.ToList() : [];
+    }
+
+    /// <summary>
+    /// Returns the number of documents containing the given term.
+    /// </summary>
+    public int GetDocumentFrequency(string term)
+    {
+        return _index.TryGetValue(term, out var postings) ? postings.Count : 0;
+    }
+
+    /// <summary>
+    /// Returns the posting for a specific term in a specific document, or null if not found.
+    /// O(1) lookup instead of O(n) scan through the postings list.
+    /// </summary>
+    public Posting? GetPosting(string term, string docId)
+    {
+        if (_index.TryGetValue(term, out var postings) && postings.TryGetValue(docId, out var posting))
+            return posting;
+        return null;
     }
 
     /// <summary>Returns document metadata by Id, or null if not found.</summary>
@@ -109,29 +141,36 @@ public sealed class InvertedIndex
             _documents[metadata.Id] = metadata;
             _docLengths[metadata.Id] = tokens.Count;
             _docContents[metadata.Id] = content;
+            _avgDocLengthDirty = true;
+
+            // Track which terms this document contains (forward index)
+            var termSet = new HashSet<string>(StringComparer.Ordinal);
 
             // Build postings for this document
             for (int i = 0; i < tokens.Count; i++)
             {
                 var term = tokens[i];
-                var postings = _index.GetOrAdd(term, _ => []);
+                termSet.Add(term);
 
-                var existing = postings.Find(p => p.DocId == metadata.Id);
-                if (existing is not null)
+                var postings = _index.GetOrAdd(term, _ => new Dictionary<string, Posting>(StringComparer.Ordinal));
+
+                if (postings.TryGetValue(metadata.Id, out var existing))
                 {
                     existing.TermFrequency++;
                     existing.Positions.Add(i);
                 }
                 else
                 {
-                    postings.Add(new Posting
+                    postings[metadata.Id] = new Posting
                     {
                         DocId = metadata.Id,
                         TermFrequency = 1,
                         Positions = [i]
-                    });
+                    };
                 }
             }
+
+            _docTerms[metadata.Id] = termSet;
         }
     }
 
@@ -146,6 +185,8 @@ public sealed class InvertedIndex
             _documents.TryRemove(docId, out _);
             _docLengths.TryRemove(docId, out _);
             _docContents.TryRemove(docId, out _);
+            _docTerms.TryRemove(docId, out _);
+            _avgDocLengthDirty = true;
         }
     }
 
@@ -160,13 +201,15 @@ public sealed class InvertedIndex
             _documents.Clear();
             _docLengths.Clear();
             _docContents.Clear();
+            _docTerms.Clear();
+            _avgDocLengthDirty = true;
         }
     }
 
     // --- Serialization helpers (used by IndexStorage) ---
 
     /// <summary>Returns the raw index dictionary for serialization.</summary>
-    internal ConcurrentDictionary<string, List<Posting>> GetRawIndex() => _index;
+    internal ConcurrentDictionary<string, Dictionary<string, Posting>> GetRawIndex() => _index;
 
     /// <summary>Returns all metadata for serialization.</summary>
     internal ConcurrentDictionary<string, DocumentMetadata> GetRawDocuments() => _documents;
@@ -186,10 +229,30 @@ public sealed class InvertedIndex
     {
         lock (_writeLock)
         {
-            foreach (var kvp in index) _index[kvp.Key] = kvp.Value;
+            // Convert List<Posting> → Dictionary<string, Posting> for O(1) lookup
+            foreach (var kvp in index)
+            {
+                var dict = new Dictionary<string, Posting>(kvp.Value.Count, StringComparer.Ordinal);
+                foreach (var posting in kvp.Value)
+                    dict[posting.DocId] = posting;
+                _index[kvp.Key] = dict;
+            }
+
             foreach (var kvp in documents) _documents[kvp.Key] = kvp.Value;
             foreach (var kvp in docLengths) _docLengths[kvp.Key] = kvp.Value;
             foreach (var kvp in docContents) _docContents[kvp.Key] = kvp.Value;
+
+            // Rebuild forward index from loaded postings
+            foreach (var (term, postings) in _index)
+            {
+                foreach (var docId in postings.Keys)
+                {
+                    var termSet = _docTerms.GetOrAdd(docId, _ => new HashSet<string>(StringComparer.Ordinal));
+                    termSet.Add(term);
+                }
+            }
+
+            _avgDocLengthDirty = true;
         }
     }
 
@@ -197,11 +260,18 @@ public sealed class InvertedIndex
 
     private void RemoveDocumentPostings(string docId)
     {
-        // Scan all terms and remove postings that reference this document.
-        // In a production system you'd also maintain a forward index to make this O(terms-in-doc).
-        foreach (var kvp in _index)
+        // Use forward index for O(terms-in-doc) removal instead of O(total-terms)
+        if (_docTerms.TryGetValue(docId, out var terms))
         {
-            kvp.Value.RemoveAll(p => p.DocId == docId);
+            foreach (var term in terms)
+            {
+                if (_index.TryGetValue(term, out var postings))
+                {
+                    postings.Remove(docId);
+                    if (postings.Count == 0)
+                        _index.TryRemove(term, out _);
+                }
+            }
         }
     }
 }

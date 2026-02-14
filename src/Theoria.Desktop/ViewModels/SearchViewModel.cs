@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
-using Theoria.Engine;
 using Theoria.Engine.Crawling;
-using Theoria.Shared.Interfaces;
 using Theoria.Shared.Models;
 
 namespace Theoria.Desktop.ViewModels;
@@ -29,12 +27,8 @@ public sealed class SearchViewModel : ViewModelBase
 
     public SearchViewModel()
     {
-        // Create the live search pipeline (same components as the API)
-        var storagePath = System.IO.Path.Combine(AppContext.BaseDirectory, "theoria-index");
-        var engine = SearchEngineFactory.Create(storagePath);
-        _ = engine.LoadIndexAsync();
-
-        var crawler = new WebCrawler(engine);
+        // Create the live search pipeline — no persistent index needed
+        var crawler = new WebCrawler();
         var searchProvider = new WebSearchProvider();
         _liveSearch = new LiveSearchOrchestrator(searchProvider, crawler);
 

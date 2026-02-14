@@ -24,29 +24,3 @@ export interface SearchResult {
     elapsedMilliseconds: number;
     items: SearchResultItem[];
 }
-
-// --- Crawl & Index types ---
-
-export interface IndexUrlResponse {
-    message: string;
-    documentId: string;
-    title: string;
-    contentLength: number;
-    linksFound: number;
-}
-
-export interface CrawledPageInfo {
-    url: string;
-    title: string | null;
-    success: boolean;
-    error: string | null;
-    contentLength: number;
-}
-
-export interface CrawlResponse {
-    message: string;
-    totalCrawled: number;
-    pagesIndexed: number;
-    pagesFailed: number;
-    pages: CrawledPageInfo[];
-}

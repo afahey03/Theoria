@@ -4,7 +4,7 @@ A search engine for theology and philosophy. Type a query, get ranked results fr
 
 ## Tech Stack
 
-**Language:** C#, TypeScript  
+**Language:** C#, TypeScript, XAML  
 **Runtime:** .NET 8, Node.js  
 **Backend:** ASP.NET Core  
 **Frontend:** React, Vite  

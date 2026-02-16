@@ -41,8 +41,8 @@ Desktop.ini
 # Theoria index data
 theoria-index/
 
+# Build output
+release/
+
 # Logs
 *.log
-
-# PowerShell scripts
-*.ps1

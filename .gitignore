@@ -43,3 +43,6 @@ theoria-index/
 
 # Logs
 *.log
+
+# PowerShell scripts
+*.ps1

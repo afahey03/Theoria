@@ -1,8 +1,29 @@
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background-color: #fdfaf6;
+}
+
+
 .app {
     max-width: 720px;
     margin: 0 auto;
-    position: relative;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
 }
+
+.app-main {
+    flex: 1;
+}
+
+
 
 .app-header {
     text-align: center;
@@ -58,4 +79,74 @@
     letter-spacing: 1px;
     font-weight: 400;
     text-transform: uppercase;
+}
+
+.app-footer {
+    margin-top: 60px;
+    padding: 24px 0;
+    text-align: center;
+    font-size: 13px;
+    color: #8a7968;
+    border-top: 1px solid rgba(60, 36, 21, 0.1);
+}
+
+.app-footer a {
+    color: #6b4c30;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.app-footer {
+    margin-top: 60px;
+    padding: 28px 0;
+    border-top: 1px solid rgba(60, 36, 21, 0.08);
+    font-size: 14px;
+    color: #7a6a5c;
+}
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Crimson Pro', Georgia, serif;
+}
+
+.footer-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 0.4px;
+}
+
+.footer-divider {
+    opacity: 0.4;
+}
+
+.mit-badge {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(60, 36, 21, 0.05);
+    border: 1px solid rgba(60, 36, 21, 0.08);
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.5px;
+}
+
+.github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    color: #6b4c30;
+    font-weight: 500;
+    transition: opacity 0.2s ease;
+}
+
+.github-link:hover {
+    opacity: 0.7;
+}
+
+
+.app-footer a:hover {
+    text-decoration: underline;
 }

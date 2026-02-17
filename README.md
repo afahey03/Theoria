@@ -53,7 +53,7 @@ Both the web and desktop apps share the same engine (`Theoria.Engine`), so resul
 
 ```
 src/
-  Theoria.Engine     Core search engine (tokenizer, index, BM25, snippets)
+  Theoria.Engine     Core search engine
   Theoria.Shared     DTOs and interfaces
   Theoria.Api        ASP.NET Core API
   Theoria.Desktop    WPF desktop client

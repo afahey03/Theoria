@@ -20,6 +20,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Set copyright year in footer
+        FooterYear.Text = DateTime.Now.Year.ToString();
+
         // Double-click: select word, Triple-click: select all (Chrome-style)
         SearchBox.PreviewMouseDown += (_, e) =>
         {
@@ -45,6 +48,22 @@ public partial class MainWindow : Window
             SearchBox.Select(start, end - start);
             e.Handled = true;
         };
+    }
+
+    /// <summary>
+    /// Opens the GitHub repository in the default browser.
+    /// </summary>
+    private void GitHubLink_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://github.com/afahey03/Theoria",
+                UseShellExecute = true
+            });
+        }
+        catch { /* Ignore if browser can't be opened */ }
     }
 
     /// <summary>

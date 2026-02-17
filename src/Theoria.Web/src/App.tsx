@@ -13,6 +13,8 @@ export default function App() {
         executeSearch,
         loadMore,
         hasMore,
+        history,
+        clearHistory,
     } = useSearch();
 
     const year = new Date().getFullYear();
@@ -40,6 +42,8 @@ export default function App() {
                     onQueryChange={setQuery}
                     onSearch={executeSearch}
                     isLoading={isLoading}
+                    history={history}
+                    onClearHistory={clearHistory}
                 />
                 <SearchResults
                     result={result}

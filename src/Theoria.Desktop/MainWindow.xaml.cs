@@ -23,6 +23,64 @@ public partial class MainWindow : Window
         // Set copyright year in footer
         FooterYear.Text = DateTime.Now.Year.ToString();
 
+        // --- Global keyboard shortcuts ---
+        PreviewKeyDown += (_, e) =>
+        {
+            // Ctrl+L: Focus the search box
+            if (e.Key == System.Windows.Input.Key.L &&
+                System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+            }
+            // Ctrl+W: Close the current article tab (not the search tab)
+            else if (e.Key == System.Windows.Input.Key.W &&
+                     System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+            {
+                if (MainTabs.SelectedIndex > 0)
+                {
+                    var tab = MainTabs.SelectedItem as TabItem;
+                    if (tab is not null)
+                    {
+                        var closingIndex = MainTabs.Items.IndexOf(tab);
+                        MainTabs.Items.Remove(tab);
+
+                        // Dispose WebView2 if present
+                        if (tab.Content is Grid grid)
+                        {
+                            foreach (var child in grid.Children)
+                            {
+                                if (child is Microsoft.Web.WebView2.Wpf.WebView2 wv)
+                                {
+                                    wv.Dispose();
+                                    break;
+                                }
+                            }
+                        }
+
+                        var newIndex = Math.Min(closingIndex, MainTabs.Items.Count - 1);
+                        MainTabs.SelectedIndex = Math.Max(newIndex, 0);
+                    }
+                    e.Handled = true;
+                }
+            }
+            // Escape: Cancel search if in progress, or unfocus search box
+            else if (e.Key == System.Windows.Input.Key.Escape)
+            {
+                if (DataContext is SearchViewModel vm && vm.IsSearching)
+                {
+                    vm.CancelSearchCommand.Execute(null);
+                    e.Handled = true;
+                }
+                else if (SearchBox.IsKeyboardFocused)
+                {
+                    System.Windows.Input.Keyboard.ClearFocus();
+                    e.Handled = true;
+                }
+            }
+        };
+
         // Double-click: select word, Triple-click: select all (Chrome-style)
         SearchBox.PreviewMouseDown += (_, e) =>
         {

@@ -16,6 +16,10 @@ export interface SearchResultItem {
     snippet: string;
     score: number;
     sourceType: ContentType;
+    /** Whether the source is from a known academic / scholarly domain. */
+    isScholarly: boolean;
+    /** Display domain of the source (e.g., "jstor.org"). */
+    domain: string | null;
 }
 
 export interface SearchResult {

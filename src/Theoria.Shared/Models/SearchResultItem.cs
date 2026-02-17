@@ -25,4 +25,17 @@ public sealed class SearchResultItem
 
     /// <summary>The type of source document.</summary>
     public ContentType SourceType { get; init; }
+
+    /// <summary>
+    /// Whether this result comes from a known scholarly / academic domain
+    /// (journals, university repositories, digital libraries, etc.).
+    /// UIs can use this to show an "Academic" badge.
+    /// </summary>
+    public bool IsScholarly { get; init; }
+
+    /// <summary>
+    /// The display domain of the source (e.g., "jstor.org", "plato.stanford.edu").
+    /// Useful for showing a source label in the UI.
+    /// </summary>
+    public string? Domain { get; init; }
 }

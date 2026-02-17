@@ -1,12 +1,32 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { search } from './api';
 import type { SearchResult, SearchResultItem } from './types';
 
 const PAGE_SIZE = 10;
+const HISTORY_KEY = 'theoria_search_history';
+const MAX_HISTORY = 20;
+
+/** Load search history from localStorage. */
+function loadHistory(): string[] {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Save search history to localStorage. */
+function saveHistory(history: string[]): void {
+    try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch { /* ignore quota errors */ }
+}
 
 /**
- * Custom hook that manages search state and API interaction.
- * Fetches up to 25 results, displays 10 at a time with "load more".
+ * Custom hook that manages search state, API interaction, and search history.
+ * Fetches up to 50 results, displays 10 at a time with "load more".
+ * Saves recent queries in localStorage for quick re-searching.
  */
 export function useSearch() {
     const [query, setQuery] = useState('');
@@ -15,15 +35,28 @@ export function useSearch() {
     const [result, setResult] = useState<SearchResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [history, setHistory] = useState<string[]>(loadHistory);
 
-    const executeSearch = useCallback(async () => {
-        if (!query.trim()) return;
+    // Persist history changes
+    useEffect(() => {
+        saveHistory(history);
+    }, [history]);
+
+    const executeSearch = useCallback(async (overrideQuery?: string) => {
+        const q = overrideQuery ?? query;
+        if (!q.trim()) return;
+
+        // Add to search history (deduplicated, most recent first)
+        setHistory(prev => {
+            const filtered = prev.filter(h => h.toLowerCase() !== q.trim().toLowerCase());
+            return [q.trim(), ...filtered].slice(0, MAX_HISTORY);
+        });
 
         setIsLoading(true);
         setError(null);
 
         try {
-            const searchResult = await search(query, 50);
+            const searchResult = await search(q, 50);
             setAllItems(searchResult.items);
             setDisplayedCount(Math.min(PAGE_SIZE, searchResult.items.length));
             setResult({
@@ -50,6 +83,10 @@ export function useSearch() {
         });
     }, [allItems]);
 
+    const clearHistory = useCallback(() => {
+        setHistory([]);
+    }, []);
+
     const hasMore = allItems.length > 0 && displayedCount < allItems.length;
 
     return {
@@ -61,5 +98,7 @@ export function useSearch() {
         executeSearch,
         loadMore,
         hasMore,
+        history,
+        clearHistory,
     };
 }

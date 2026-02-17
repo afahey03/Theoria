@@ -408,6 +408,25 @@
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel>
+                                    <!-- Domain + scholarly badge row -->
+                                    <StackPanel Orientation="Horizontal"
+                                                Margin="0,0,0,4">
+                                        <TextBlock Text="{Binding Domain}"
+                                                   FontSize="10"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <!-- Scholarly badge (only visible when IsScholarly is true) -->
+                                        <Border Background="#E8F5E0"
+                                                CornerRadius="3"
+                                                Padding="6,2"
+                                                Margin="8,0,0,0"
+                                                Visibility="{Binding IsScholarly, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="ACADEMIC"
+                                                       Foreground="#3A6B2A"
+                                                       FontSize="9"
+                                                       FontWeight="Bold"/>
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock FontSize="16"
                                                FontWeight="SemiBold"
                                                FontFamily="Georgia, 'Times New Roman', serif">
@@ -489,8 +508,8 @@
                         Click="GitHubLink_Click">
                     <StackPanel Orientation="Horizontal">
                         <Viewbox Width="14"
-                                Height="14"
-                                Margin="0,0,6,0">
+                                 Height="14"
+                                 Margin="0,0,6,0">
                             <Canvas Width="16"
                                     Height="16">
                                 <Path Fill="{StaticResource TextSecondary}"

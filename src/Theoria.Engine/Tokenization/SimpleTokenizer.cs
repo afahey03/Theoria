@@ -8,7 +8,10 @@ namespace Theoria.Engine.Tokenization;
 ///   1. Lowercase normalization
 ///   2. Punctuation stripping (keeps alphanumeric and hyphens)
 ///   3. Stop-word removal (common English words)
-///   4. (Optional) stemming can be added later
+///   4. Porter stemming (theology → theolog, philosophical → philosoph)
+///
+/// Stemming dramatically improves recall: a search for "theology" now
+/// matches documents containing "theological", "theologians", "theologies", etc.
 ///
 /// This ensures deterministic results across desktop and web clients,
 /// because both share the exact same tokenizer implementation.
@@ -51,7 +54,7 @@ public sealed partial class SimpleTokenizer : ITokenizer
         {
             if (part.Length > 0 && !StopWords.Contains(part))
             {
-                tokens.Add(part);
+                tokens.Add(PorterStemmer.Stem(part));
             }
         }
 

@@ -9,6 +9,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// --- Response caching & compression ---
+builder.Services.AddResponseCaching();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
+builder.Services.AddMemoryCache();
+
 // --- Register the shared search engine as a singleton ---
 // Both ISearchEngine and IIndexer resolve to the same instance,
 // ensuring the web API uses the exact same engine core as the desktop client.
@@ -53,7 +61,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseResponseCompression();
 app.UseCors();
+app.UseResponseCaching();
 app.MapControllers();
 
 app.Run();

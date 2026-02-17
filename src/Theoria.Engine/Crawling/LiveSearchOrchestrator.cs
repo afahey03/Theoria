@@ -14,13 +14,13 @@ namespace Theoria.Engine.Crawling;
 /// discovers relevant URLs via DuckDuckGo, fetches each page, scores the
 /// content with BM25, and returns ranked results — all in a single call.
 ///
-/// This is the core pipeline that makes Theoria work like a real search engine:
-///   1. Query → DuckDuckGo → list of candidate URLs
-///   2. Fetch each URL in parallel (using WebCrawler.FetchPageAsync)
+/// Pipeline:
+///   1. Query → DuckDuckGo → list of candidate URLs (deduplicated)
+///   2. Fetch each URL in parallel with per-page timeout
 ///   3. Build a temporary in-memory BM25 index over the fetched content
-///   4. Score &amp; rank documents against the original query
-///   5. Generate highlighted snippets
-///   6. Return ranked SearchResult
+///   4. Score &amp; rank with: BM25 base + title match boost + scholarly domain boost
+///   5. Generate best-window highlighted snippets
+///   6. Return ranked SearchResult with source-type metadata
 ///
 /// Both the web API and the desktop client call into this same orchestrator
 /// so they share identical behaviour.
@@ -36,6 +36,9 @@ public sealed class LiveSearchOrchestrator
     /// <summary>How many DuckDuckGo result URLs to fetch.</summary>
     public int MaxDiscoveryResults { get; init; } = 50;
 
+    /// <summary>Per-page fetch timeout in seconds. Slow sites won't block the whole search.</summary>
+    public int PerPageTimeoutSeconds { get; init; } = 10;
+
     public LiveSearchOrchestrator(
         WebSearchProvider searchProvider,
         WebCrawler crawler)
@@ -47,10 +50,6 @@ public sealed class LiveSearchOrchestrator
     /// <summary>
     /// Performs a live internet search for the given query.
     /// </summary>
-    /// <param name="query">The user's search query.</param>
-    /// <param name="topN">Maximum results to return.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A SearchResult with ranked items from live internet content.</returns>
     public async Task<SearchResult> SearchAsync(
         string query,
         int topN = 10,
@@ -84,11 +83,14 @@ public sealed class LiveSearchOrchestrator
             };
         }
 
-        // --- Step 2: Fetch pages in parallel ---
+        // --- Step 1b: Deduplicate URLs (normalize www, trailing slashes, etc.) ---
+        var deduped = DeduplicateResults(webResults);
+
+        // --- Step 2: Fetch pages in parallel with per-page timeout ---
         var fetchTasks = new List<Task<(WebSearchResult Discovery, CrawledPage Page)>>();
         using var semaphore = new SemaphoreSlim(MaxParallelFetches);
 
-        foreach (var webResult in webResults)
+        foreach (var webResult in deduped)
         {
             var task = FetchWithThrottleAsync(semaphore, webResult, cancellationToken);
             fetchTasks.Add(task);
@@ -96,12 +98,11 @@ public sealed class LiveSearchOrchestrator
 
         var fetchResults = await Task.WhenAll(fetchTasks);
 
-        // --- Step 3: Build temporary in-memory index and score ---
+        // --- Step 3: Build temporary in-memory index ---
         ITokenizer tokenizer = new SimpleTokenizer();
         var invertedIndex = new InvertedIndex(tokenizer);
         IScorer scorer = new BM25Scorer(invertedIndex);
 
-        // A map from URL → fetched data for result building
         var pageMap = new Dictionary<string, (WebSearchResult Discovery, CrawledPage Page)>(
             StringComparer.OrdinalIgnoreCase);
 
@@ -127,7 +128,7 @@ public sealed class LiveSearchOrchestrator
         if (pageMap.Count == 0)
         {
             sw.Stop();
-            var fallbackItems = webResults.Select(r => new SearchResultItem
+            var fallbackItems = deduped.Select(r => new SearchResultItem
             {
                 Title = r.Title,
                 Url = r.Url,
@@ -145,7 +146,7 @@ public sealed class LiveSearchOrchestrator
             };
         }
 
-        // --- Step 4: Score documents against the query ---
+        // --- Step 4: Score documents with BM25 + title boost + domain boost ---
         var queryTokens = tokenizer.Tokenize(query);
         var allDocIds = invertedIndex.GetAllDocumentIds();
         var scored = new List<(string DocId, double Score)>();
@@ -153,6 +154,30 @@ public sealed class LiveSearchOrchestrator
         foreach (var docId in allDocIds)
         {
             double score = scorer.Score(queryTokens, docId);
+
+            // Title match boost: if query terms appear in the page title, boost up to 30%
+            var meta = invertedIndex.GetDocument(docId);
+            if (meta is not null)
+            {
+                var titleTokens = tokenizer.Tokenize(meta.Title);
+                int titleMatches = 0;
+                foreach (var qt in queryTokens)
+                {
+                    foreach (var tt in titleTokens)
+                    {
+                        if (qt.Equals(tt, StringComparison.Ordinal))
+                        {
+                            titleMatches++;
+                            break;
+                        }
+                    }
+                }
+                if (titleMatches > 0)
+                {
+                    double titleBoost = 1.0 + 0.3 * ((double)titleMatches / queryTokens.Count);
+                    score *= titleBoost;
+                }
+            }
 
             // Boost scholarly / academic domains by 50%
             if (WebSearchProvider.IsScholarlyDomain(docId))
@@ -163,25 +188,30 @@ public sealed class LiveSearchOrchestrator
 
         scored.Sort((a, b) => b.Score.CompareTo(a.Score));
 
-        // --- Step 5: Build result items with snippets ---
+        // --- Step 5: Build result items with best-match snippets ---
         var items = new List<SearchResultItem>();
         foreach (var (docId, score) in scored.Take(topN))
         {
             var meta = invertedIndex.GetDocument(docId);
             var content = invertedIndex.GetDocumentContent(docId);
 
-            // Use the page title; fall back to the DuckDuckGo title
             var title = meta?.Title ?? docId;
             if (pageMap.TryGetValue(docId, out var info) && !string.IsNullOrWhiteSpace(info.Page.Title))
                 title = info.Page.Title;
 
+            var url = meta?.Url ?? docId;
+            string? domain = null;
+            try { domain = new Uri(url).Host.Replace("www.", ""); } catch { }
+
             items.Add(new SearchResultItem
             {
                 Title = title,
-                Url = meta?.Url ?? docId,
+                Url = url,
                 Snippet = SnippetGenerator.Generate(content ?? string.Empty, queryTokens),
                 Score = score,
-                SourceType = ContentType.Html
+                SourceType = ContentType.Html,
+                IsScholarly = WebSearchProvider.IsScholarlyDomain(url),
+                Domain = domain
             });
         }
 
@@ -196,6 +226,46 @@ public sealed class LiveSearchOrchestrator
         };
     }
 
+    /// <summary>
+    /// Deduplicates web search results by normalizing URLs:
+    /// strips www., trailing slashes, fragments, and normalizes http→https.
+    /// </summary>
+    private static List<WebSearchResult> DeduplicateResults(IReadOnlyList<WebSearchResult> results)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var deduped = new List<WebSearchResult>();
+
+        foreach (var r in results)
+        {
+            var normalized = NormalizeUrl(r.Url);
+            if (seen.Add(normalized))
+                deduped.Add(r);
+        }
+        return deduped;
+    }
+
+    /// <summary>
+    /// Normalizes a URL for deduplication: https, no www, no trailing slash, no fragment.
+    /// </summary>
+    private static string NormalizeUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+        try
+        {
+            var uri = new Uri(url);
+            var host = uri.Host;
+            if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+                host = host[4..];
+            var path = uri.AbsolutePath.TrimEnd('/');
+            var queryString = uri.Query;
+            return $"https://{host}{path}{queryString}".ToLowerInvariant();
+        }
+        catch
+        {
+            return url.ToLowerInvariant().TrimEnd('/');
+        }
+    }
+
     private async Task<(WebSearchResult Discovery, CrawledPage Page)> FetchWithThrottleAsync(
         SemaphoreSlim semaphore,
         WebSearchResult discovery,
@@ -204,8 +274,25 @@ public sealed class LiveSearchOrchestrator
         await semaphore.WaitAsync(cancellationToken);
         try
         {
-            var page = await _crawler.FetchPageAsync(discovery.Url, cancellationToken);
+            // Per-page timeout so one slow site doesn't block the entire search
+            using var perPageCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            perPageCts.CancelAfter(TimeSpan.FromSeconds(PerPageTimeoutSeconds));
+
+            var page = await _crawler.FetchPageAsync(discovery.Url, perPageCts.Token);
             return (discovery, page);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Per-page timeout hit, not a user cancellation — return a failure
+            return (discovery, new CrawledPage
+            {
+                Url = discovery.Url,
+                Title = string.Empty,
+                TextContent = string.Empty,
+                OutLinks = [],
+                Success = false,
+                Error = "Page fetch timed out"
+            });
         }
         finally
         {

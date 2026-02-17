@@ -16,6 +16,22 @@
     font-size: 15px;
 }
 
+.searching-text {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
 .search-error {
     color: #a0422a;
     background: #fdf0ec;
@@ -43,4 +59,110 @@
     background: #6b4c30;
     color: #f5f0e8;
     border-color: #6b4c30;
+}
+
+/* --- Skeleton loading --- */
+
+.search-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.skeleton-item {
+    padding: 18px 20px;
+    background: #fffdf9;
+    border: 1px solid #e8ddd0;
+    border-radius: 10px;
+}
+
+.skeleton-line {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #f0ebe4 25%, #e8ddd0 50%, #f0ebe4 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    margin-bottom: 10px;
+}
+
+.skeleton-title {
+    width: 60%;
+    height: 18px;
+}
+
+.skeleton-url {
+    width: 40%;
+    height: 10px;
+}
+
+.skeleton-snippet {
+    width: 100%;
+}
+
+.skeleton-snippet.short {
+    width: 70%;
+    margin-bottom: 0;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* --- Search tips empty state --- */
+
+.search-tips {
+    margin-top: 40px;
+    text-align: center;
+    color: #8a7968;
+}
+
+.tips-title {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #5b3a1a;
+    margin-bottom: 16px;
+}
+
+.tips-list {
+    list-style: none;
+    padding: 0;
+    font-size: 14px;
+    line-height: 2;
+}
+
+.tips-list li {
+    margin-bottom: 4px;
+}
+
+.tips-list em {
+    color: #6b4c30;
+    font-style: normal;
+    background: #f5f0e8;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.tips-hint {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #b5a898;
+}
+
+.tips-hint kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: 'Inter', sans-serif;
+    background: #f5f0e8;
+    border: 1px solid #d4c8b8;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 #d4c8b8;
 }

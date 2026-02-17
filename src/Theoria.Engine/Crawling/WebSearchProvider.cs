@@ -249,7 +249,7 @@ public sealed class WebSearchProvider
     /// </summary>
     public static readonly HashSet<string> ScholarlyDomains = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Academic repositories & encyclopedias
+        // ── Academic repositories & encyclopedias ──────────────────────
         "plato.stanford.edu",       // Stanford Encyclopedia of Philosophy
         "iep.utm.edu",              // Internet Encyclopedia of Philosophy
         "jstor.org",                // JSTOR
@@ -258,26 +258,83 @@ public sealed class WebSearchProvider
         "scholar.google.com",       // Google Scholar
         "arxiv.org",
         "doi.org",
+        "researchgate.net",         // ResearchGate  
+        "semanticscholar.org",      // Semantic Scholar
+        "philarchive.org",          // PhilArchive — open access philosophy
+        "ssrn.com",                 // Social Science Research Network
 
-        // Catholic / Thomistic sources
+        // ── Catholic / Thomistic sources ──────────────────────────────
         "newadvent.org",            // Catholic Encyclopedia & Church Fathers
         "corpusthomisticum.org",    // Corpus Thomisticum
         "dhspriory.org",            // Dominican House of Studies
         "aquinas.cc",               // Aquinas online
         "ccel.org",                 // Christian Classics Ethereal Library
         "fordham.edu",              // Fordham Medieval Sourcebook
+        "vatican.va",               // Vatican documents & encyclicals
+        "documenta-catholica.eu",   // Catholic document archive
+        "catholicculture.org",      // Catholic Culture
+        "stthomas.edu",             // University of St. Thomas
+        "thomisticcommentary.org",  // Thomistic Commentary
+        "isidore.co",               // Isidore of Seville digital library
+        "liturgica.com",            // Liturgical scholarship
 
-        // Orthodox & Patristic
+        // ── Orthodox & Patristic ──────────────────────────────────────
         "orthodoxwiki.org",
+        "oca.org",                  // Orthodox Church in America
+        "pravoslavie.ru",           // Pravoslavie.ru (English)
+        "myriobiblos.gr",           // Encyclopaedia of the Encyclopaedia of the Hellenic World
+        "tertullian.org",           // Tertullian Project — patristic texts
+        "earlychurchtexts.com",     // Early Church texts & translations
 
-        // Protestant / Reformed
+        // ── Protestant / Reformed ─────────────────────────────────────
         "carm.org",
         "monergism.com",
         "theopedia.com",
+        "desiringgod.org",          // Desiring God — Piper's ministry
+        "ligonier.org",             // Ligonier Ministries — R.C. Sproul
+        "thegospelcoalition.org",   // The Gospel Coalition
+        "etsjets.org",              // Evangelical Theological Society
+        "biblicalstudies.org.uk",   // Biblical Studies UK
+        "reformedtheology.org",     // Reformed theology
+        "frame-poythress.org",      // Frame & Poythress materials
 
-        // General theology & encyclopedias
+        // ── Biblical studies & ancient texts ──────────────────────────
+        "biblegateway.com",         // Bible Gateway
+        "blueletterbible.org",      // Blue Letter Bible (original languages)
+        "biblehub.com",             // Bible Hub
+        "deadseascrolls.org.il",    // Dead Sea Scrolls digital library
+        "sacred-texts.com",         // Internet Sacred Text Archive
+        "earlyjewishwritings.com",  // Early Jewish Writings
+        "earlyapostolicfathers.com",// Early Apostolic Fathers
+        "perseus.tufts.edu",        // Perseus Digital Library (Greek/Latin)
+        "loebclassics.com",         // Loeb Classical Library
+        "thelatinlibrary.com",      // The Latin Library
+
+        // ── Philosophy (general) ──────────────────────────────────────
+        "philosophybasics.com",     // Philosophy Basics
+        "iep.utm.edu",              // Internet Encyclopedia of Philosophy (repeated for safety)
+        "philosophynow.org",        // Philosophy Now magazine
+        "partiallyexaminedlife.com",// Examined Life podcast/blog
+        "earlymoderntexts.com",     // Early Modern Texts (Kant, Hume, etc.)
+        "gutenberg.org",            // Project Gutenberg — primary texts
+        "marxists.org",             // Marxists Internet Archive (includes Hegel)
+
+        // ── University presses & journals ─────────────────────────────
+        "cambridge.org",            // Cambridge University Press
+        "oxfordscholarship.com",    // Oxford Scholarship Online
+        "academic.oup.com",         // Oxford Academic
+        "journals.sagepub.com",     // SAGE Journals
+        "springer.com",             // Springer
+        "tandfonline.com",          // Taylor & Francis Online
+        "brill.com",                // Brill (theology & religion)
+        "degruyter.com",            // De Gruyter
+        "muse.jhu.edu",             // Project MUSE
+
+        // ── General theology & encyclopedias ──────────────────────────
         "britannica.com",
         "en.wikipedia.org",
+        "oxfordreference.com",      // Oxford Reference
+        "catholicdistance.org",     // Catholic Distance University
     };
 
     /// <summary>

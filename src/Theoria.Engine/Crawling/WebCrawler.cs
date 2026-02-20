@@ -20,11 +20,13 @@ public sealed class WebCrawler
 {
     private readonly HttpClient _httpClient;
     private readonly IIndexer? _indexer;
+    private readonly RobotsTxtChecker _robotsChecker;
 
-    public WebCrawler(IIndexer? indexer = null, HttpClient? httpClient = null)
+    public WebCrawler(IIndexer? indexer = null, HttpClient? httpClient = null, RobotsTxtChecker? robotsChecker = null)
     {
         _indexer = indexer;
         _httpClient = httpClient ?? CreateDefaultHttpClient();
+        _robotsChecker = robotsChecker ?? new RobotsTxtChecker(_httpClient);
     }
 
     /// <summary>
@@ -137,6 +139,20 @@ public sealed class WebCrawler
     {
         try
         {
+            // Check robots.txt before fetching — respect site crawl rules
+            if (!await _robotsChecker.IsAllowedAsync(url, cancellationToken))
+            {
+                return new CrawledPage
+                {
+                    Url = url,
+                    Title = string.Empty,
+                    TextContent = string.Empty,
+                    OutLinks = [],
+                    Success = false,
+                    Error = "Blocked by robots.txt"
+                };
+            }
+
             var response = await _httpClient.GetAsync(url, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -206,16 +222,21 @@ public sealed class WebCrawler
 
     private static HttpClient CreateDefaultHttpClient()
     {
-        var handler = new HttpClientHandler
+        var handler = new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
             AllowAutoRedirect = true,
             MaxAutomaticRedirections = 5,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            MaxConnectionsPerServer = 10,
+            EnableMultipleHttp2Connections = true,
         };
 
         var client = new HttpClient(handler)
         {
-            Timeout = TimeSpan.FromSeconds(15)
+            Timeout = TimeSpan.FromSeconds(15),
+            DefaultRequestVersion = System.Net.HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
 
         // Identify ourselves as a reasonable user agent

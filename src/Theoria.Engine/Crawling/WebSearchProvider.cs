@@ -1,6 +1,9 @@
+using System.Collections.Frozen;
 using System.Net;
 using System.Text.RegularExpressions;
-using HtmlAgilityPack;
+using AngleSharp.Dom;
+using AngleSharp.Html.Dom;
+using AngleSharp.Html.Parser;
 
 namespace Theoria.Engine.Crawling;
 
@@ -15,6 +18,7 @@ namespace Theoria.Engine.Crawling;
 public sealed class WebSearchProvider
 {
     private readonly HttpClient _httpClient;
+    private static readonly HtmlParser HtmlParser = new();
 
     public WebSearchProvider(HttpClient? httpClient = null)
     {
@@ -80,46 +84,43 @@ public sealed class WebSearchProvider
                     break; // no next page data available
                 }
 
-                var doc = new HtmlDocument();
-                doc.LoadHtml(html);
+                var doc = HtmlParser.ParseDocument(html);
 
-                // Parse results from this page
-                var resultNodes = doc.DocumentNode.SelectNodes("//div[contains(@class,'result__body')]")
-                               ?? doc.DocumentNode.SelectNodes("//div[contains(@class,'result')]");
+                // Parse results from this page (CSS selectors via AngleSharp)
+                var resultNodes = doc.QuerySelectorAll("div[class*=result__body]");
+                if (resultNodes.Length == 0)
+                    resultNodes = doc.QuerySelectorAll("div[class*=result]");
 
-                if (resultNodes is not null)
+                foreach (var node in resultNodes)
                 {
-                    foreach (var node in resultNodes)
+                    if (results.Count >= maxResults) break;
+
+                    var linkNode = node.QuerySelector("a[class*=result__a]")
+                                 ?? node.QuerySelector("a[href]");
+
+                    if (linkNode is null) continue;
+
+                    var href = linkNode.GetAttribute("href") ?? string.Empty;
+                    var resultUrl = ExtractRealUrl(href);
+
+                    if (string.IsNullOrWhiteSpace(resultUrl)) continue;
+                    if (!resultUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!seenUrls.Add(resultUrl)) continue; // skip duplicates
+
+                    var title = linkNode.TextContent.Trim();
+
+                    var snippetNode = node.QuerySelector("a[class*=result__snippet]")
+                                   ?? node.QuerySelector("div[class*=result__snippet]");
+                    var snippet = snippetNode is not null
+                        ? snippetNode.TextContent.Trim()
+                        : string.Empty;
+
+                    results.Add(new WebSearchResult
                     {
-                        if (results.Count >= maxResults) break;
-
-                        var linkNode = node.SelectSingleNode(".//a[contains(@class,'result__a')]")
-                                     ?? node.SelectSingleNode(".//a[@href]");
-
-                        if (linkNode is null) continue;
-
-                        var href = linkNode.GetAttributeValue("href", string.Empty);
-                        var resultUrl = ExtractRealUrl(href);
-
-                        if (string.IsNullOrWhiteSpace(resultUrl)) continue;
-                        if (!resultUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
-                        if (!seenUrls.Add(resultUrl)) continue; // skip duplicates
-
-                        var title = HtmlEntity.DeEntitize(linkNode.InnerText).Trim();
-
-                        var snippetNode = node.SelectSingleNode(".//a[contains(@class,'result__snippet')]")
-                                       ?? node.SelectSingleNode(".//div[contains(@class,'result__snippet')]");
-                        var snippet = snippetNode is not null
-                            ? HtmlEntity.DeEntitize(snippetNode.InnerText).Trim()
-                            : string.Empty;
-
-                        results.Add(new WebSearchResult
-                        {
-                            Url = resultUrl,
-                            Title = title,
-                            Snippet = snippet
-                        });
-                    }
+                        Url = resultUrl,
+                        Title = title,
+                        Snippet = snippet
+                    });
                 }
 
                 // Extract the "next page" form data for pagination
@@ -139,29 +140,34 @@ public sealed class WebSearchProvider
     /// Extracts the hidden form fields from DuckDuckGo's "Next Page" form
     /// so we can POST for page 2.
     /// </summary>
-    private static string? ExtractNextPageFormData(HtmlDocument doc)
+    private static string? ExtractNextPageFormData(IHtmlDocument doc)
     {
         // DuckDuckGo has a form with class "nav-link" for the next button
-        var nextForms = doc.DocumentNode.SelectNodes("//form[contains(@class,'nav-link')]");
-        if (nextForms is null || nextForms.Count == 0)
+        var navForms = doc.QuerySelectorAll("form[class*=nav-link]");
+        IElement? form = null;
+
+        if (navForms.Length > 0)
         {
-            // Fallback: look for any form with a "next" input
-            nextForms = doc.DocumentNode.SelectNodes("//form[.//input[@value='Next']]");
+            form = navForms[navForms.Length - 1]; // Take the last form
+        }
+        else
+        {
+            // Fallback: find any input with value "Next" and traverse to parent form
+            var nextInput = doc.QuerySelector("input[value='Next']");
+            form = nextInput?.Closest("form");
         }
 
-        if (nextForms is null || nextForms.Count == 0)
+        if (form is null)
             return null;
 
-        // Take the last form (usually the "Next" button at bottom)
-        var form = nextForms[^1];
-        var inputs = form.SelectNodes(".//input[@name]");
-        if (inputs is null) return null;
+        var inputs = form.QuerySelectorAll("input[name]");
+        if (inputs.Length == 0) return null;
 
         var pairs = new List<string>();
         foreach (var input in inputs)
         {
-            var name = input.GetAttributeValue("name", "");
-            var value = input.GetAttributeValue("value", "");
+            var name = input.GetAttribute("name") ?? "";
+            var value = input.GetAttribute("value") ?? "";
             if (!string.IsNullOrEmpty(name))
                 pairs.Add($"{Uri.EscapeDataString(name)}={Uri.EscapeDataString(value)}");
         }
@@ -201,15 +207,20 @@ public sealed class WebSearchProvider
 
     private static HttpClient CreateDefaultClient()
     {
-        var handler = new HttpClientHandler
+        var handler = new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
             AllowAutoRedirect = true,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            MaxConnectionsPerServer = 10,
+            EnableMultipleHttp2Connections = true,
         };
 
         var client = new HttpClient(handler)
         {
-            Timeout = TimeSpan.FromSeconds(15)
+            Timeout = TimeSpan.FromSeconds(15),
+            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
 
         client.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -246,8 +257,9 @@ public sealed class WebSearchProvider
     /// <summary>
     /// Well-known scholarly and theological domains that receive a BM25 score
     /// boost via <see cref="LiveSearchOrchestrator"/>.
+    /// FrozenSet provides optimized O(1) lookups with better cache locality.
     /// </summary>
-    public static readonly HashSet<string> ScholarlyDomains = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly FrozenSet<string> ScholarlyDomains = new[]
     {
         // ── Academic repositories & encyclopedias ──────────────────────
         "plato.stanford.edu",       // Stanford Encyclopedia of Philosophy
@@ -335,7 +347,7 @@ public sealed class WebSearchProvider
         "en.wikipedia.org",
         "oxfordreference.com",      // Oxford Reference
         "catholicdistance.org",     // Catholic Distance University
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns true if the given URL belongs to a known scholarly domain.

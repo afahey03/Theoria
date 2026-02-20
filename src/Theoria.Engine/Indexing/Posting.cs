@@ -15,7 +15,7 @@ public sealed class Posting
 
     /// <summary>
     /// Zero-based token positions where the term occurs.
-    /// Used for phrase matching and snippet generation.
+    /// Uses HashSet for O(1) Contains checks during phrase matching.
     /// </summary>
-    public List<int> Positions { get; init; } = [];
+    public HashSet<int> Positions { get; init; } = [];
 }

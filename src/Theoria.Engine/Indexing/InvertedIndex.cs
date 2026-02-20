@@ -42,7 +42,7 @@ public sealed class InvertedIndex
 
     // Cached average document length — invalidated on add/remove
     private double _cachedAvgDocLength;
-    private bool _avgDocLengthDirty = true;
+    private volatile bool _avgDocLengthDirty = true;
 
     public InvertedIndex(ITokenizer tokenizer)
     {

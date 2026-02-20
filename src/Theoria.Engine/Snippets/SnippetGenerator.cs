@@ -30,7 +30,7 @@ public static class SnippetGenerator
 
     /// <summary>
     /// Generates a highlighted snippet from the given content for the specified query terms.
-    /// Uses a sliding-window approach to find the passage with the best term coverage.
+    /// Uses a sliding-window approach with sorted hits and binary search for the best term coverage.
     /// </summary>
     public static string Generate(string content, IReadOnlyList<string> queryTerms)
     {
@@ -56,23 +56,35 @@ public static class SnippetGenerator
         if (hits.Count == 0)
             return content.Length > WindowSize ? content[..WindowSize] + "..." : content;
 
+        // Sort hits by position for binary search and early exit in window scanning
+        hits.Sort((a, b) => a.Position.CompareTo(b.Position));
+
         // Slide window across the text and score each position
+        // Use binary search to find the first hit in each window — O(log n) instead of O(n)
         int bestStart = 0;
         double bestScore = -1;
+        int hitCount = hits.Count;
 
         for (int pos = 0; pos < content.Length; pos += StepSize)
         {
             int winEnd = pos + WindowSize;
+
+            // Binary search for the first hit >= pos
+            int lo = 0, hi = hitCount;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) / 2;
+                if (hits[mid].Position < pos) lo = mid + 1;
+                else hi = mid;
+            }
+
+            // Count hits within the window, early-exit when past window end
             var distinctTerms = new HashSet<int>();
             int totalHits = 0;
-
-            foreach (var (hitPos, termIdx) in hits)
+            for (int j = lo; j < hitCount && hits[j].Position < winEnd; j++)
             {
-                if (hitPos >= pos && hitPos < winEnd)
-                {
-                    distinctTerms.Add(termIdx);
-                    totalHits++;
-                }
+                distinctTerms.Add(hits[j].TermIndex);
+                totalHits++;
             }
 
             // Score: prioritize covering more distinct terms, then total density
@@ -108,17 +120,17 @@ public static class SnippetGenerator
         if (start > 0) sb.Append("...");
 
         var highlighted = snippet;
-        foreach (var term in queryTerms)
-        {
-            // Match the term at word boundaries or as a substring prefix
-            var pattern = $"({Regex.Escape(term)}\\w*)";
-            highlighted = Regex.Replace(
-                highlighted,
-                pattern,
-                $"{HighlightOpen}$1{HighlightClose}",
-                RegexOptions.IgnoreCase,
-                TimeSpan.FromMilliseconds(100));
-        }
+        // Single combined regex for all terms — one pass instead of N passes
+        var termPatterns = queryTerms
+            .Select(t => Regex.Escape(t) + @"\w*")
+            .Distinct();
+        var combinedPattern = $"({string.Join("|", termPatterns)})";
+        highlighted = Regex.Replace(
+            highlighted,
+            combinedPattern,
+            $"{HighlightOpen}$1{HighlightClose}",
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(100));
 
         sb.Append(highlighted);
         if (end < content.Length) sb.Append("...");

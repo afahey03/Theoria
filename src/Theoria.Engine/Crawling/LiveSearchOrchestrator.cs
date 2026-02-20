@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Runtime.CompilerServices;
 using Theoria.Engine.Indexing;
 using Theoria.Engine.Scoring;
 using Theoria.Engine.Snippets;
@@ -86,6 +88,9 @@ public sealed class LiveSearchOrchestrator
         // --- Step 1b: Deduplicate URLs (normalize www, trailing slashes, etc.) ---
         var deduped = DeduplicateResults(webResults);
 
+        // --- Step 1c: DNS prefetching — resolve all unique hosts in parallel ---
+        PrefetchDns(deduped);
+
         // --- Step 2: Fetch pages in parallel with per-page timeout ---
         var fetchTasks = new List<Task<(WebSearchResult Discovery, CrawledPage Page)>>();
         using var semaphore = new SemaphoreSlim(MaxParallelFetches);
@@ -156,21 +161,17 @@ public sealed class LiveSearchOrchestrator
             double score = scorer.Score(queryTokens, docId);
 
             // Title match boost: if query terms appear in the page title, boost up to 30%
+            // Uses HashSet for O(n+m) instead of O(n*m) nested loops
             var meta = invertedIndex.GetDocument(docId);
             if (meta is not null)
             {
                 var titleTokens = tokenizer.Tokenize(meta.Title);
+                var titleTokenSet = new HashSet<string>(titleTokens, StringComparer.Ordinal);
                 int titleMatches = 0;
                 foreach (var qt in queryTokens)
                 {
-                    foreach (var tt in titleTokens)
-                    {
-                        if (qt.Equals(tt, StringComparison.Ordinal))
-                        {
-                            titleMatches++;
-                            break;
-                        }
-                    }
+                    if (titleTokenSet.Contains(qt))
+                        titleMatches++;
                 }
                 if (titleMatches > 0)
                 {
@@ -299,4 +300,218 @@ public sealed class LiveSearchOrchestrator
             semaphore.Release();
         }
     }
+
+    /// <summary>
+    /// Pre-resolves DNS for all unique hosts in the result set.
+    /// Fire-and-forget: warms the OS DNS cache so subsequent HTTP connections
+    /// skip DNS resolution latency.
+    /// </summary>
+    private static void PrefetchDns(IReadOnlyList<WebSearchResult> results)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in results)
+        {
+            if (Uri.TryCreate(r.Url, UriKind.Absolute, out var u)
+                && u.Host is { Length: > 0 } host
+                && seen.Add(host))
+            {
+                _ = Dns.GetHostEntryAsync(host);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs a live internet search and yields results in phases via IAsyncEnumerable.
+    /// Phase 1 ("discovery"): preliminary results from search provider snippets (instant).
+    /// Phase 2 ("scored"): final BM25-scored results after page fetching and scoring.
+    /// Designed for Server-Sent Events streaming.
+    /// </summary>
+    public async IAsyncEnumerable<StreamedSearchEvent> SearchStreamingAsync(
+        string query,
+        int topN = 10,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            yield return new StreamedSearchEvent
+            {
+                Phase = "scored",
+                Result = new SearchResult
+                {
+                    Query = query ?? string.Empty,
+                    TotalMatches = 0,
+                    ElapsedMilliseconds = 0,
+                    Items = []
+                }
+            };
+            yield break;
+        }
+
+        // --- Discover candidate URLs ---
+        var webResults = await _searchProvider.SearchAsync(query, MaxDiscoveryResults, cancellationToken);
+
+        if (webResults.Count == 0)
+        {
+            yield return new StreamedSearchEvent
+            {
+                Phase = "scored",
+                Result = new SearchResult
+                {
+                    Query = query,
+                    TotalMatches = 0,
+                    ElapsedMilliseconds = sw.Elapsed.TotalMilliseconds,
+                    Items = []
+                }
+            };
+            yield break;
+        }
+
+        var deduped = DeduplicateResults(webResults);
+
+        // --- Phase 1: Yield discovery results immediately (DuckDuckGo snippets) ---
+        var discoveryItems = deduped.Take(topN).Select(r => new SearchResultItem
+        {
+            Title = r.Title,
+            Url = r.Url,
+            Snippet = r.Snippet,
+            Score = 0,
+            SourceType = ContentType.Html
+        }).ToList();
+
+        yield return new StreamedSearchEvent
+        {
+            Phase = "discovery",
+            Result = new SearchResult
+            {
+                Query = query,
+                TotalMatches = discoveryItems.Count,
+                ElapsedMilliseconds = sw.Elapsed.TotalMilliseconds,
+                Items = discoveryItems
+            }
+        };
+
+        // --- DNS prefetching + page fetching ---
+        PrefetchDns(deduped);
+
+        var fetchTasks = new List<Task<(WebSearchResult Discovery, CrawledPage Page)>>();
+        using var semaphore = new SemaphoreSlim(MaxParallelFetches);
+        foreach (var webResult in deduped)
+            fetchTasks.Add(FetchWithThrottleAsync(semaphore, webResult, cancellationToken));
+
+        var fetchResults = await Task.WhenAll(fetchTasks);
+
+        // --- Build index + score ---
+        ITokenizer tokenizer = new SimpleTokenizer();
+        var invertedIndex = new InvertedIndex(tokenizer);
+        IScorer scorer = new BM25Scorer(invertedIndex);
+        var pageMap = new Dictionary<string, (WebSearchResult Discovery, CrawledPage Page)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (discovery, page) in fetchResults)
+        {
+            if (!page.Success || string.IsNullOrWhiteSpace(page.TextContent)) continue;
+
+            invertedIndex.AddDocument(new DocumentMetadata
+            {
+                Id = page.Url,
+                Title = !string.IsNullOrWhiteSpace(page.Title) ? page.Title : discovery.Title,
+                Url = page.Url,
+                ContentType = ContentType.Html,
+                LastIndexedAt = DateTime.UtcNow
+            }, page.TextContent);
+            pageMap[page.Url] = (discovery, page);
+        }
+
+        // If no pages fetched successfully, re-yield discovery results as final
+        if (pageMap.Count == 0)
+        {
+            yield return new StreamedSearchEvent
+            {
+                Phase = "scored",
+                Result = new SearchResult
+                {
+                    Query = query,
+                    TotalMatches = discoveryItems.Count,
+                    ElapsedMilliseconds = sw.Elapsed.TotalMilliseconds,
+                    Items = discoveryItems
+                }
+            };
+            yield break;
+        }
+
+        var queryTokens = tokenizer.Tokenize(query);
+        var scored = new List<(string DocId, double Score)>();
+
+        foreach (var docId in invertedIndex.GetAllDocumentIds())
+        {
+            double score = scorer.Score(queryTokens, docId);
+            var meta = invertedIndex.GetDocument(docId);
+            if (meta is not null)
+            {
+                var titleTokenSet = new HashSet<string>(tokenizer.Tokenize(meta.Title), StringComparer.Ordinal);
+                int titleMatches = queryTokens.Count(qt => titleTokenSet.Contains(qt));
+                if (titleMatches > 0)
+                    score *= 1.0 + 0.3 * ((double)titleMatches / queryTokens.Count);
+            }
+            if (WebSearchProvider.IsScholarlyDomain(docId))
+                score *= 1.5;
+            scored.Add((docId, score));
+        }
+
+        scored.Sort((a, b) => b.Score.CompareTo(a.Score));
+
+        // --- Phase 2: Yield final BM25-scored results ---
+        var items = new List<SearchResultItem>();
+        foreach (var (docId, score) in scored.Take(topN))
+        {
+            var meta = invertedIndex.GetDocument(docId);
+            var content = invertedIndex.GetDocumentContent(docId);
+            var title = meta?.Title ?? docId;
+            if (pageMap.TryGetValue(docId, out var info) && !string.IsNullOrWhiteSpace(info.Page.Title))
+                title = info.Page.Title;
+            var url = meta?.Url ?? docId;
+            string? domain = null;
+            try { domain = new Uri(url).Host.Replace("www.", ""); } catch { }
+
+            items.Add(new SearchResultItem
+            {
+                Title = title,
+                Url = url,
+                Snippet = SnippetGenerator.Generate(content ?? string.Empty, queryTokens),
+                Score = score,
+                SourceType = ContentType.Html,
+                IsScholarly = WebSearchProvider.IsScholarlyDomain(url),
+                Domain = domain
+            });
+        }
+
+        sw.Stop();
+        yield return new StreamedSearchEvent
+        {
+            Phase = "scored",
+            Result = new SearchResult
+            {
+                Query = query,
+                TotalMatches = scored.Count,
+                ElapsedMilliseconds = sw.Elapsed.TotalMilliseconds,
+                Items = items
+            }
+        };
+    }
+}
+
+/// <summary>
+/// An event emitted during streamed search.
+/// Phase "discovery" = initial quick results from search provider snippets (instant).
+/// Phase "scored" = final BM25-scored results after page fetching and scoring.
+/// </summary>
+public sealed class StreamedSearchEvent
+{
+    /// <summary>The search phase: "discovery" or "scored".</summary>
+    public required string Phase { get; init; }
+
+    /// <summary>The search result data for this phase.</summary>
+    public required SearchResult Result { get; init; }
 }

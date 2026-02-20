@@ -21,13 +21,15 @@ namespace Theoria.Engine;
 ///   - Orchestrates search  (parse query → score docs → generate snippets → rank)
 ///   - Manages index persistence (save/load on startup)
 /// </summary>
-public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
+public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer, IDisposable
 {
     private readonly InvertedIndex _invertedIndex;
     private readonly ITokenizer _tokenizer;
     private readonly IScorer _scorer;
     private readonly QueryParser _queryParser;
     private readonly IndexStorage? _storage;
+    private readonly Timer? _debounceSaveTimer;
+    private static readonly TimeSpan SaveDebounceInterval = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Creates a new search engine instance.
@@ -51,13 +53,16 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
         _queryParser = new QueryParser(_tokenizer);
 
         if (storagePath is not null)
+        {
             _storage = new IndexStorage(storagePath);
+            _debounceSaveTimer = new Timer(DebouncedSaveCallback, null, Timeout.Infinite, Timeout.Infinite);
+        }
     }
 
     // ----- ISearchEngine -----
 
     /// <inheritdoc />
-    public async Task<SearchResult> SearchAsync(SearchRequest request, CancellationToken cancellationToken = default)
+    public Task<SearchResult> SearchAsync(SearchRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -67,13 +72,13 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
         var parsed = _queryParser.Parse(request.Query);
         if (parsed.IsEmpty)
         {
-            return new SearchResult
+            return Task.FromResult(new SearchResult
             {
                 Query = request.Query,
                 TotalMatches = 0,
                 ElapsedMilliseconds = sw.Elapsed.TotalMilliseconds,
                 Items = []
-            };
+            });
         }
 
         // 2. Collect all query terms for scoring
@@ -93,20 +98,15 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
             }
         }
 
-        // 4. Filter by required terms (AND semantics)
+        // 4. Filter by required terms (AND semantics) — O(1) per term via GetPosting
         if (parsed.RequiredTerms.Count > 0)
         {
             candidateDocIds.RemoveWhere(docId =>
             {
                 foreach (var term in parsed.RequiredTerms)
                 {
-                    var postings = _invertedIndex.GetPostings(term);
-                    bool found = false;
-                    foreach (var p in postings)
-                    {
-                        if (p.DocId == docId) { found = true; break; }
-                    }
-                    if (!found) return true;
+                    if (_invertedIndex.GetPosting(term, docId) is null)
+                        return true;
                 }
                 return false;
             });
@@ -160,7 +160,7 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
 
         sw.Stop();
 
-        return await Task.FromResult(new SearchResult
+        return Task.FromResult(new SearchResult
         {
             Query = request.Query,
             TotalMatches = totalMatches,
@@ -172,21 +172,19 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
     // ----- IIndexer -----
 
     /// <inheritdoc />
-    public async Task IndexDocumentAsync(DocumentMetadata metadata, string content, CancellationToken cancellationToken = default)
+    public Task IndexDocumentAsync(DocumentMetadata metadata, string content, CancellationToken cancellationToken = default)
     {
         _invertedIndex.AddDocument(metadata, content);
-
-        if (_storage is not null)
-            await _storage.SaveAsync(_invertedIndex, cancellationToken);
+        ScheduleDebouncedSave();
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public async Task RemoveDocumentAsync(string documentId, CancellationToken cancellationToken = default)
+    public Task RemoveDocumentAsync(string documentId, CancellationToken cancellationToken = default)
     {
         _invertedIndex.RemoveDocument(documentId);
-
-        if (_storage is not null)
-            await _storage.SaveAsync(_invertedIndex, cancellationToken);
+        ScheduleDebouncedSave();
+        return Task.CompletedTask;
     }
 
     // ----- Index persistence -----
@@ -200,11 +198,51 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
         return await _storage.LoadAsync(_invertedIndex, cancellationToken);
     }
 
+    /// <summary>
+    /// Immediately flushes the index to disk. Use after bulk indexing operations
+    /// to ensure persistence without waiting for the debounce timer.
+    /// </summary>
+    public async Task FlushAsync(CancellationToken cancellationToken = default)
+    {
+        if (_storage is not null)
+            await _storage.SaveAsync(_invertedIndex, cancellationToken);
+    }
+
+    /// <summary>Disposes the debounce timer and performs a final flush.</summary>
+    public void Dispose()
+    {
+        _debounceSaveTimer?.Dispose();
+        // Synchronous final save — best-effort to persist on shutdown
+        if (_storage is not null)
+        {
+            try { _storage.SaveAsync(_invertedIndex).GetAwaiter().GetResult(); }
+            catch { /* swallow on teardown */ }
+        }
+    }
+
     // ----- Private helpers -----
+
+    private void ScheduleDebouncedSave()
+    {
+        _debounceSaveTimer?.Change(SaveDebounceInterval, Timeout.InfiniteTimeSpan);
+    }
+
+    private async void DebouncedSaveCallback(object? state)
+    {
+        try
+        {
+            if (_storage is not null)
+                await _storage.SaveAsync(_invertedIndex);
+        }
+        catch
+        {
+            // Swallow exceptions in timer callbacks to prevent process crashes
+        }
+    }
 
     /// <summary>
     /// Checks whether a document contains all specified phrases
-    /// (consecutive term positions).
+    /// (consecutive term positions). Uses O(1) GetPosting lookups.
     /// </summary>
     private bool MatchesPhrases(string docId, List<List<string>> phrases)
     {
@@ -212,14 +250,8 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
         {
             if (phrase.Count == 0) continue;
 
-            // Get positions for the first term in the phrase
-            var firstPostings = _invertedIndex.GetPostings(phrase[0]);
-            Posting? firstPosting = null;
-            foreach (var p in firstPostings)
-            {
-                if (p.DocId == docId) { firstPosting = p; break; }
-            }
-
+            // O(1) lookup for the first term's posting in this document
+            var firstPosting = _invertedIndex.GetPosting(phrase[0], docId);
             if (firstPosting is null) return false;
 
             // Check each starting position of the first term
@@ -229,12 +261,8 @@ public sealed class TheoriaSearchEngine : ISearchEngine, IIndexer
                 bool allMatch = true;
                 for (int i = 1; i < phrase.Count; i++)
                 {
-                    var termPostings = _invertedIndex.GetPostings(phrase[i]);
-                    Posting? tp = null;
-                    foreach (var p in termPostings)
-                    {
-                        if (p.DocId == docId) { tp = p; break; }
-                    }
+                    // O(1) lookup for subsequent terms
+                    var tp = _invertedIndex.GetPosting(phrase[i], docId);
 
                     if (tp is null || !tp.Positions.Contains(startPos + i))
                     {

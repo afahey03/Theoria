@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Theoria.Engine.Crawling;
@@ -86,5 +87,39 @@ public class SearchController : ControllerBase
         _cache.Set(cacheKey, result, CacheDuration);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// GET /search/stream?q=aquinas&amp;topN=10
+    /// Streams search results via Server-Sent Events (SSE).
+    /// First event ("discovery"): instant results from DuckDuckGo snippets.
+    /// Second event ("scored"): final BM25-scored results after page fetching.
+    /// Connect with EventSource in the browser for real-time updates.
+    /// </summary>
+    [HttpGet("stream")]
+    public async Task StreamSearch(
+        [FromQuery(Name = "q")] string query,
+        [FromQuery] int topN = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            Response.StatusCode = 400;
+            return;
+        }
+
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+        Response.Headers["X-Accel-Buffering"] = "no"; // Disable buffering for nginx proxies
+
+        _logger.LogInformation("Streaming search: q={Query}, topN={TopN}", query, topN);
+
+        await foreach (var evt in _liveSearch.SearchStreamingAsync(query, topN, cancellationToken))
+        {
+            var json = JsonSerializer.Serialize(evt.Result);
+            await Response.WriteAsync($"event: {evt.Phase}\ndata: {json}\n\n", cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
     }
 }

@@ -1,13 +1,16 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using HtmlAgilityPack;
+using AngleSharp.Dom;
+using AngleSharp.Html.Dom;
+using AngleSharp.Html.Parser;
 
 namespace Theoria.Engine.Crawling;
 
 /// <summary>
 /// Extracts clean, readable text from raw HTML.
-/// Uses HtmlAgilityPack to parse the DOM once, strips scripts/styles/nav,
-/// and returns the visible text content + discovered links.
+/// Uses AngleSharp's fully HTML5-compliant parser for correct DOM construction,
+/// strips scripts/styles/nav, and returns the visible text content + discovered links.
+/// AngleSharp is thread-safe and handles malformed HTML better than legacy parsers.
 /// </summary>
 public static partial class HtmlContentExtractor
 {
@@ -29,14 +32,16 @@ public static partial class HtmlContentExtractor
         string Text,
         IReadOnlyList<string> Links);
 
+    /// <summary>Reusable HTML parser — AngleSharp's HtmlParser is thread-safe.</summary>
+    private static readonly HtmlParser Parser = new();
+
     /// <summary>
     /// Parses HTML once and extracts title, visible text, and links in a single pass.
     /// This avoids the cost of parsing the same HTML three times.
     /// </summary>
     public static ExtractionResult Extract(string html, string baseUrl)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+        var doc = Parser.ParseDocument(html);
 
         var title = ExtractTitleFromDoc(doc);
         var text = ExtractTextFromDoc(doc);
@@ -50,8 +55,7 @@ public static partial class HtmlContentExtractor
     /// </summary>
     public static string ExtractTitle(string html)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+        var doc = Parser.ParseDocument(html);
         return ExtractTitleFromDoc(doc);
     }
 
@@ -60,8 +64,7 @@ public static partial class HtmlContentExtractor
     /// </summary>
     public static string ExtractText(string html)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+        var doc = Parser.ParseDocument(html);
         return ExtractTextFromDoc(doc);
     }
 
@@ -70,46 +73,47 @@ public static partial class HtmlContentExtractor
     /// </summary>
     public static IReadOnlyList<string> ExtractLinks(string html, string baseUrl)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+        var doc = Parser.ParseDocument(html);
         return ExtractLinksFromDoc(doc, baseUrl);
     }
 
     // --- Internal single-doc helpers ---
 
-    private static string ExtractTitleFromDoc(HtmlDocument doc)
+    private static string ExtractTitleFromDoc(IHtmlDocument doc)
     {
-        var titleNode = doc.DocumentNode.SelectSingleNode("//title");
-        if (titleNode is not null)
-            return HtmlEntity.DeEntitize(titleNode.InnerText).Trim();
+        var titleEl = doc.QuerySelector("title");
+        if (titleEl is not null)
+            return titleEl.TextContent.Trim();
 
-        var h1Node = doc.DocumentNode.SelectSingleNode("//h1");
-        if (h1Node is not null)
-            return HtmlEntity.DeEntitize(h1Node.InnerText).Trim();
+        var h1El = doc.QuerySelector("h1");
+        if (h1El is not null)
+            return h1El.TextContent.Trim();
 
         return string.Empty;
     }
 
-    private static string ExtractTextFromDoc(HtmlDocument doc)
+    private static string ExtractTextFromDoc(IHtmlDocument doc)
     {
         var sb = new StringBuilder(4096);
-        ExtractTextRecursive(doc.DocumentNode, sb);
+        var root = (INode?)doc.Body ?? doc.DocumentElement;
+        if (root is not null)
+            ExtractTextRecursive(root, sb);
 
         var text = MultipleWhitespace().Replace(sb.ToString(), " ").Trim();
         return text;
     }
 
-    private static IReadOnlyList<string> ExtractLinksFromDoc(HtmlDocument doc, string baseUrl)
+    private static IReadOnlyList<string> ExtractLinksFromDoc(IHtmlDocument doc, string baseUrl)
     {
-        var anchorNodes = doc.DocumentNode.SelectNodes("//a[@href]");
-        if (anchorNodes is null) return [];
+        var anchors = doc.QuerySelectorAll("a[href]");
+        if (anchors.Length == 0) return [];
 
         Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri);
-        var links = new List<string>(anchorNodes.Count);
+        var links = new List<string>(anchors.Length);
 
-        foreach (var anchor in anchorNodes)
+        foreach (var anchor in anchors)
         {
-            var href = anchor.GetAttributeValue("href", string.Empty);
+            var href = anchor.GetAttribute("href") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(href)) continue;
 
             if (href.StartsWith('#') || href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
@@ -130,11 +134,11 @@ public static partial class HtmlContentExtractor
         return links;
     }
 
-    private static void ExtractTextRecursive(HtmlNode node, StringBuilder sb)
+    private static void ExtractTextRecursive(INode node, StringBuilder sb)
     {
-        if (node.NodeType == HtmlNodeType.Text)
+        if (node.NodeType == NodeType.Text)
         {
-            var text = HtmlEntity.DeEntitize(node.InnerText);
+            var text = node.TextContent;
             if (!string.IsNullOrWhiteSpace(text))
             {
                 sb.Append(text);
@@ -143,15 +147,15 @@ public static partial class HtmlContentExtractor
             return;
         }
 
-        if (node.NodeType != HtmlNodeType.Element) return;
-        if (ExcludedTags.Contains(node.Name)) return;
+        if (node is not IElement element) return;
+        if (ExcludedTags.Contains(element.LocalName)) return;
 
         foreach (var child in node.ChildNodes)
         {
             ExtractTextRecursive(child, sb);
         }
 
-        if (node.Name is "p" or "div" or "br" or "li" or "h1" or "h2" or "h3"
+        if (element.LocalName is "p" or "div" or "br" or "li" or "h1" or "h2" or "h3"
             or "h4" or "h5" or "h6" or "tr" or "blockquote" or "section" or "article")
         {
             sb.Append(' ');

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Theoria.Shared.Interfaces;
 
@@ -25,8 +26,10 @@ public sealed partial class SimpleTokenizer : ITokenizer
     /// <summary>
     /// A standard set of English stop words that carry little search value.
     /// Removing them shrinks the index and improves relevance.
+    /// FrozenSet provides optimized O(1) lookups with better cache locality
+    /// than HashSet for read-heavy workloads.
     /// </summary>
-    private static readonly HashSet<string> StopWords = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> StopWords = new[]
     {
         "a", "an", "the", "and", "or", "not", "but", "in", "on", "at",
         "to", "for", "of", "with", "by", "from", "is", "it", "as",
@@ -38,7 +41,7 @@ public sealed partial class SimpleTokenizer : ITokenizer
         "our", "their", "what", "which", "who", "whom", "how",
         "when", "where", "why", "if", "then", "so", "no", "yes",
         "about", "up", "out", "just", "into", "over", "after"
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <inheritdoc />
     public IReadOnlyList<string> Tokenize(string text)

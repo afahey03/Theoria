@@ -3,7 +3,7 @@
 A search engine for theology and philosophy. Type a query, get ranked results from the internet.
 
 <img width="1919" height="1030" alt="image" src="https://github.com/user-attachments/assets/b766d36b-13b7-4c26-9c0e-c1fc9b1383dc" />
-
+-
 <img width="1916" height="941" alt="image" src="https://github.com/user-attachments/assets/8598cf1f-1627-4280-a222-d1b580e016a4" />
 
 ## Tech Stack
